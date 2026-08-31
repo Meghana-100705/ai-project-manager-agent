@@ -58,7 +58,7 @@ CONFIG = {
     "sp_dataset_path": os.getenv("SP_DATASET_PATH", "C:/Users/SAMA/Downloads/data.csv"),
 
     # Dataset B: Backlog dataset (your Jira-like project issues)
-    "backlog_path": os.getenv("BACKLOG_PATH", "C:/Users/SAMA/Downloads/agile_ready_backlog.csv"),
+    "backlog_path": os.getenv("BACKLOG_PATH", "agile_ready_backlog.csv"),
 
     # Deliverable artifacts
     "outputs_path": os.getenv("OUTPUTS_PATH", "C:/Users/SAMA/Downloads/pm_agent_outputs"),
