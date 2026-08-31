@@ -127,13 +127,49 @@ def health():
 
 @app.post("/run")
 def run_agent(req: RunRequest):
-    agent = PMAgent()
-    backlog_path = req.backlog_path or CONFIG.get("backlog_path")
-    agent.load_backlog(backlog_path, source_type=req.backlog_type)
-    tickets = agent.break_down_feature(req.feature_description)
-    blockers = agent.detect_blockers()
+    try:
+        agent = PMAgent()
 
-    return agent.export_results(
-        tickets=tickets,
-        blockers=blockers
-    )
+        backlog_path = req.backlog_path or CONFIG.get("backlog_path")
+
+        print("DEBUG backlog_path:", backlog_path)
+        print("DEBUG backlog_type:", req.backlog_type)
+
+        agent.load_backlog(
+            backlog_path,
+            source_type=req.backlog_type
+        )
+
+        print("DEBUG backlog loaded")
+
+        tickets = agent.break_down_feature(
+            req.feature_description
+        )
+
+        print("DEBUG tickets generated:", len(tickets))
+
+        blockers = agent.detect_blockers()
+
+        print("DEBUG blockers detected:", len(blockers))
+
+        result = agent.export_results(
+            tickets=tickets,
+            blockers=blockers
+        )
+
+        print("DEBUG export successful")
+
+        return result
+
+    except Exception as e:
+        import traceback
+
+        print("========== PM AGENT ERROR ==========")
+        traceback.print_exc()
+        print("====================================")
+
+        return {
+            "error": str(e),
+            "error_type": type(e).__name__,
+            "traceback": traceback.format_exc()
+        }
