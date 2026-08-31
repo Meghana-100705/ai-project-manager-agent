@@ -662,126 +662,398 @@ class RuleBasedTeamAssigner(TeamAssigner):
         return max(scores, key=scores.get)
 
 
+# class AnalyticsBlockerDetector(BlockerDetector):
+#     """Detect blockers by analyzing issue states and dependencies."""
+#     SEQUENCING_RULES = {
+#         "development": ["testing", "deployment"],
+#         "testing": ["deployment"],
+#         "deployment": ["release"]
+#     }
+
+#     def __init__(self):
+#         self.dependency_list_export: List[Dict[str, Any]] = []
+
+#     def detect_blockers(self, issues: List[Issue]) -> List[BlockerAlert]:
+#         blockers: List[BlockerAlert] = []
+#         issue_map = {i.issue_id: i for i in issues}
+#         dependency_list: List[Dict[str, Any]] = []
+
+#         # Global checks for missing prerequisite patterns
+#         all_text = " ".join([(i.title or "") + " " + (i.description or "") for i in issues]).lower()
+#         api_found_anywhere = "api" in all_text
+#         testing_found_anywhere = "test" in all_text
+
+#         for issue in issues:
+#             if issue.status == "blocked":
+#                 blockers.append(BlockerAlert(
+#                     issue_id=issue.issue_id,
+#                     blocker_type="status",
+#                     description=issue.title + " is marked as blocked",
+#                     severity="high",
+#                     recommended_action="Check why this task is blocked"
+#                 ))
+
+#             # Dependency edges + alerts
+#             for dep_id in (issue.dependencies or []):
+#                 if dep_id in issue_map:
+#                     dep_issue = issue_map[dep_id]
+#                     dependency_list.append({
+#                         "issue_id": issue.issue_id,
+#                         "issue_title": issue.title,
+#                         "depends_on_id": dep_id,
+#                         "depends_on_title": dep_issue.title,
+#                         "depends_on_status": dep_issue.status
+#                     })
+
+#                     if dep_issue.status != "done":
+#                         blockers.append(BlockerAlert(
+#                             issue_id=issue.issue_id,
+#                             blocker_type="dependency",
+#                             description=f"Blocked by {dep_issue.issue_id}",
+#                             severity="high",
+#                             recommended_action=f"Complete {dep_issue.issue_id} first"
+#                         ))
+#                 else:
+#                     dependency_list.append({
+#                         "issue_id": issue.issue_id,
+#                         "issue_title": issue.title,
+#                         "depends_on_id": dep_id,
+#                         "depends_on_title": "Unknown",
+#                         "depends_on_status": "Unknown"
+#                     })
+#                     blockers.append(BlockerAlert(
+#                         issue_id=issue.issue_id,
+#                         blocker_type="dependency",
+#                         description=f"Missing dependency reference: {dep_id}",
+#                         severity="medium",
+#                         recommended_action="Verify dependency ID or create missing prerequisite ticket"
+#                     ))
+
+#             text = (safe_text(issue.title, issue.description)).lower()
+
+#             # Missing prerequisites
+#             if "integration" in text and not api_found_anywhere:
+#                 blockers.append(BlockerAlert(
+#                     issue_id=issue.issue_id,
+#                     blocker_type="missing_prerequisite",
+#                     description="Integration exists but no API task found",
+#                     severity="high",
+#                     recommended_action="Create API task first"
+#                 ))
+
+#             if ("deploy" in text or "deployment" in text) and not testing_found_anywhere:
+#                 blockers.append(BlockerAlert(
+#                     issue_id=issue.issue_id,
+#                     blocker_type="missing_prerequisite",
+#                     description="Deployment exists but no testing task found",
+#                     severity="high",
+#                     recommended_action="Add testing task before deployment"
+#                 ))
+#             # Sequencing constraints
+#             for key, next_steps in self.SEQUENCING_RULES.items():
+#                 if key in text:
+#                     for next_step in next_steps:
+#                         next_issue_found = any(
+#                             next_step in safe_text(other.title, other.description).lower()
+#                             for other in issues
+#                         )
+#                         if not next_issue_found:
+#                             blockers.append(BlockerAlert(
+#                                 issue_id=issue.issue_id,
+#                                 blocker_type="sequencing",
+#                                 description=f"{key.capitalize()} task exists but no {next_step} task scheduled",
+#                                 severity="medium",
+#                                 recommended_action=f"Plan {next_step} task after {key}"
+#                             ))
+
+#             # Stale tasks
+#             if issue.status == "in_progress" and issue.updated_at:
+#                 last_update = safe_parse_date(issue.updated_at)
+#                 if last_update:
+#                     days_old = (datetime.now() - last_update).days
+#                     if days_old > CONFIG.get("stale_days", 5):
+#                         blockers.append(BlockerAlert(
+#                             issue_id=issue.issue_id,
+#                             blocker_type="stale",
+#                             description="No update for " + str(days_old) + " days",
+#                             severity="medium",
+#                             recommended_action="Check status with assignee"
+#                         ))
+
+#         self.dependency_list_export = dependency_list
+#         return blockers
+
+
+
+
 class AnalyticsBlockerDetector(BlockerDetector):
-    """Detect blockers by analyzing issue states and dependencies."""
-    SEQUENCING_RULES = {
-        "development": ["testing", "deployment"],
-        "testing": ["deployment"],
-        "deployment": ["release"]
-    }
+    """
+    Detect genuine blockers and dependencies.
+
+    IMPORTANT:
+    - Backlog dependencies are reported as dependency edges.
+    - A dependency is NOT automatically considered a blocker.
+    - Stale/sequencing/missing-prerequisite checks are not treated as
+      active blockers.
+    - Feature analysis uses the generated AUTO-* tickets separately.
+    """
 
     def __init__(self):
         self.dependency_list_export: List[Dict[str, Any]] = []
 
+    # ---------------------------------------------------------
+    # BACKLOG BLOCKER DETECTION
+    # ---------------------------------------------------------
     def detect_blockers(self, issues: List[Issue]) -> List[BlockerAlert]:
-        blockers: List[BlockerAlert] = []
-        issue_map = {i.issue_id: i for i in issues}
-        dependency_list: List[Dict[str, Any]] = []
+        """
+        Detect only genuine blockers in the supplied backlog.
 
-        # Global checks for missing prerequisite patterns
-        all_text = " ".join([(i.title or "") + " " + (i.description or "") for i in issues]).lower()
-        api_found_anywhere = "api" in all_text
-        testing_found_anywhere = "test" in all_text
+        A backlog issue is considered an active blocker when:
+        1. It is explicitly marked as 'blocked', OR
+        2. It depends on another backlog issue that is explicitly blocked.
+
+        We DO NOT classify every unfinished dependency as a blocker.
+        We DO NOT classify stale issues as blockers.
+        We DO NOT generate global sequencing blockers.
+        """
+
+        blockers: List[BlockerAlert] = []
+        self.dependency_list_export = []
+
+        if not issues:
+            return blockers
+
+        issue_map = {
+            str(issue.issue_id).strip(): issue
+            for issue in issues
+            if issue.issue_id
+        }
+
+        seen_blockers = set()
+        seen_dependencies = set()
 
         for issue in issues:
-            if issue.status == "blocked":
-                blockers.append(BlockerAlert(
-                    issue_id=issue.issue_id,
-                    blocker_type="status",
-                    description=issue.title + " is marked as blocked",
-                    severity="high",
-                    recommended_action="Check why this task is blocked"
-                ))
 
-            # Dependency edges + alerts
-            for dep_id in (issue.dependencies or []):
-                if dep_id in issue_map:
-                    dep_issue = issue_map[dep_id]
-                    dependency_list.append({
-                        "issue_id": issue.issue_id,
-                        "issue_title": issue.title,
-                        "depends_on_id": dep_id,
-                        "depends_on_title": dep_issue.title,
-                        "depends_on_status": dep_issue.status
-                    })
+            issue_id = str(issue.issue_id).strip()
 
-                    if dep_issue.status != "done":
-                        blockers.append(BlockerAlert(
-                            issue_id=issue.issue_id,
-                            blocker_type="dependency",
-                            description=f"Blocked by {dep_issue.issue_id}",
+            # -------------------------------------------------
+            # 1. Explicitly blocked issue
+            # -------------------------------------------------
+            if str(issue.status).lower() == "blocked":
+
+                blocker_key = (issue_id, "status")
+
+                if blocker_key not in seen_blockers:
+                    blockers.append(
+                        BlockerAlert(
+                            issue_id=issue_id,
+                            blocker_type="status",
+                            description=(
+                                f"{issue.title} is explicitly marked as blocked"
+                            ),
                             severity="high",
-                            recommended_action=f"Complete {dep_issue.issue_id} first"
-                        ))
-                else:
-                    dependency_list.append({
-                        "issue_id": issue.issue_id,
-                        "issue_title": issue.title,
-                        "depends_on_id": dep_id,
-                        "depends_on_title": "Unknown",
-                        "depends_on_status": "Unknown"
-                    })
-                    blockers.append(BlockerAlert(
-                        issue_id=issue.issue_id,
-                        blocker_type="dependency",
-                        description=f"Missing dependency reference: {dep_id}",
-                        severity="medium",
-                        recommended_action="Verify dependency ID or create missing prerequisite ticket"
-                    ))
-
-            text = (safe_text(issue.title, issue.description)).lower()
-
-            # Missing prerequisites
-            if "integration" in text and not api_found_anywhere:
-                blockers.append(BlockerAlert(
-                    issue_id=issue.issue_id,
-                    blocker_type="missing_prerequisite",
-                    description="Integration exists but no API task found",
-                    severity="high",
-                    recommended_action="Create API task first"
-                ))
-
-            if ("deploy" in text or "deployment" in text) and not testing_found_anywhere:
-                blockers.append(BlockerAlert(
-                    issue_id=issue.issue_id,
-                    blocker_type="missing_prerequisite",
-                    description="Deployment exists but no testing task found",
-                    severity="high",
-                    recommended_action="Add testing task before deployment"
-                ))
-            # Sequencing constraints
-            for key, next_steps in self.SEQUENCING_RULES.items():
-                if key in text:
-                    for next_step in next_steps:
-                        next_issue_found = any(
-                            next_step in safe_text(other.title, other.description).lower()
-                            for other in issues
+                            recommended_action=(
+                                "Investigate the blocking reason and "
+                                "resolve the issue"
+                            )
                         )
-                        if not next_issue_found:
-                            blockers.append(BlockerAlert(
-                                issue_id=issue.issue_id,
-                                blocker_type="sequencing",
-                                description=f"{key.capitalize()} task exists but no {next_step} task scheduled",
-                                severity="medium",
-                                recommended_action=f"Plan {next_step} task after {key}"
-                            ))
+                    )
 
-            # Stale tasks
-            if issue.status == "in_progress" and issue.updated_at:
-                last_update = safe_parse_date(issue.updated_at)
-                if last_update:
-                    days_old = (datetime.now() - last_update).days
-                    if days_old > CONFIG.get("stale_days", 5):
-                        blockers.append(BlockerAlert(
-                            issue_id=issue.issue_id,
-                            blocker_type="stale",
-                            description="No update for " + str(days_old) + " days",
-                            severity="medium",
-                            recommended_action="Check status with assignee"
-                        ))
+                    seen_blockers.add(blocker_key)
 
-        self.dependency_list_export = dependency_list
+            # -------------------------------------------------
+            # 2. Dependency analysis
+            # -------------------------------------------------
+            for dep_id in (issue.dependencies or []):
+
+                dep_id = str(dep_id).strip()
+
+                if not dep_id:
+                    continue
+
+                dependency_key = (issue_id, dep_id)
+
+                # Avoid duplicate dependency edges
+                if dependency_key in seen_dependencies:
+                    continue
+
+                seen_dependencies.add(dependency_key)
+
+                # Known dependency
+                if dep_id in issue_map:
+
+                    dep_issue = issue_map[dep_id]
+
+                    self.dependency_list_export.append(
+                        {
+                            "issue_id": issue_id,
+                            "issue_title": issue.title,
+                            "depends_on_id": dep_id,
+                            "depends_on_title": dep_issue.title,
+                            "depends_on_status": dep_issue.status
+                        }
+                    )
+
+                    # IMPORTANT:
+                    # An unfinished dependency is NOT automatically
+                    # a blocker.
+                    #
+                    # Only an explicitly BLOCKED dependency creates
+                    # a dependency blocker.
+                    if str(dep_issue.status).lower() == "blocked":
+
+                        blocker_key = (issue_id, "dependency", dep_id)
+
+                        if blocker_key not in seen_blockers:
+
+                            blockers.append(
+                                BlockerAlert(
+                                    issue_id=issue_id,
+                                    blocker_type="dependency",
+                                    description=(
+                                        f"Blocked by {dep_issue.issue_id} "
+                                        f"({dep_issue.title})"
+                                    ),
+                                    severity="high",
+                                    recommended_action=(
+                                        f"Resolve {dep_issue.issue_id} first"
+                                    )
+                                )
+                            )
+
+                            seen_blockers.add(blocker_key)
+
+                # Unknown dependency reference
+                else:
+
+                    self.dependency_list_export.append(
+                        {
+                            "issue_id": issue_id,
+                            "issue_title": issue.title,
+                            "depends_on_id": dep_id,
+                            "depends_on_title": "Unknown",
+                            "depends_on_status": "Unknown"
+                        }
+                    )
+
+                    # Missing dependency is a data-quality warning,
+                    # NOT an active blocker.
+                    logger.warning(
+                        f"Unknown dependency reference: "
+                        f"{issue_id} -> {dep_id}"
+                    )
+
         return blockers
+
+    # ---------------------------------------------------------
+    # FEATURE ANALYSIS
+    # ---------------------------------------------------------
+    def analyze_generated_feature(
+        self,
+        tickets: List[GeneratedTicket]
+    ) -> List[BlockerAlert]:
+        """
+        Analyze dependencies between newly generated feature tickets.
+
+        Example:
+
+            AUTO-001
+                ↓
+            AUTO-002
+                ↓
+            AUTO-003
+                ↓
+            AUTO-004
+                ↓
+            AUTO-005
+
+        These are dependencies, NOT blockers.
+
+        Newly generated tickets do not have a real execution status yet,
+        so they should not be incorrectly reported as blocked.
+        """
+
+        blockers: List[BlockerAlert] = []
+
+        self.dependency_list_export = []
+
+        if not tickets:
+            return blockers
+
+        ticket_map = {
+            str(ticket.ticket_id).strip(): ticket
+            for ticket in tickets
+            if ticket.ticket_id
+        }
+
+        seen_dependencies = set()
+
+        for ticket in tickets:
+
+            ticket_id = str(ticket.ticket_id).strip()
+
+            for dep_id in (ticket.dependencies or []):
+
+                dep_id = str(dep_id).strip()
+
+                if not dep_id:
+                    continue
+
+                dependency_key = (ticket_id, dep_id)
+
+                if dependency_key in seen_dependencies:
+                    continue
+
+                seen_dependencies.add(dependency_key)
+
+                # ---------------------------------------------
+                # Dependency points to another generated ticket
+                # ---------------------------------------------
+                if dep_id in ticket_map:
+
+                    dependency_ticket = ticket_map[dep_id]
+
+                    self.dependency_list_export.append(
+                        {
+                            "issue_id": ticket_id,
+                            "issue_title": ticket.title,
+                            "depends_on_id": dep_id,
+                            "depends_on_title": dependency_ticket.title,
+                            "depends_on_status": "planned"
+                        }
+                    )
+
+                # ---------------------------------------------
+                # Unknown dependency
+                # ---------------------------------------------
+                else:
+
+                    self.dependency_list_export.append(
+                        {
+                            "issue_id": ticket_id,
+                            "issue_title": ticket.title,
+                            "depends_on_id": dep_id,
+                            "depends_on_title": "Unknown",
+                            "depends_on_status": "Unknown"
+                        }
+                    )
+
+                    logger.warning(
+                        f"Generated ticket {ticket_id} has "
+                        f"unknown dependency {dep_id}"
+                    )
+
+        # -----------------------------------------------------
+        # IMPORTANT:
+        #
+        # Generated tickets are newly planned work.
+        # Therefore their dependencies are not blockers yet.
+        #
+        # blockers = [] unless a real execution status exists.
+        # -----------------------------------------------------
+
+        return blockers
+
 
 
 class LLMSummaryGenerator(SummaryGenerator):
@@ -848,8 +1120,157 @@ class LLMSummaryGenerator(SummaryGenerator):
 # ─────────────────────────────────────────────────────
 # MAIN PM AGENT
 # ─────────────────────────────────────────────────────
+# class PMAgent:
+#     """Main Project Manager Agent orchestrator."""
+
+#     def __init__(self):
+#         self.reader = BacklogReader()
+#         self.ticket_gen = LLMTicketGenerator()
+#         self.estimator = LLMStoryPointEstimator()
+#         self.assigner = RuleBasedTeamAssigner()
+#         self.blocker_det = AnalyticsBlockerDetector()
+#         self.summary_gen = LLMSummaryGenerator()
+#         self.backlog: List[Issue] = []
+#         logger.info("PM Agent initialized")
+
+#         ensure_dir(CONFIG.get("outputs_path", "./outputs/"))
+
+#     def load_backlog(self, source: str, source_type: str = "csv") -> int:
+#         """Load backlog from data source. Returns count of issues loaded."""
+#         if source_type == "csv":
+#             self.backlog = self.reader.from_csv(source)
+#         elif source_type == "json":
+#             self.backlog = self.reader.from_json(source)
+#         elif source_type == "api":
+#             self.backlog = self.reader.from_api(source)
+#         logger.info(f"Loaded {len(self.backlog)} issues from {source_type}")
+#         return len(self.backlog)
+
+#     def break_down_feature(self, feature_description: str) -> List[GeneratedTicket]:
+#         """Generate tickets from a high-level feature description."""
+#         tickets = self.ticket_gen.generate_tickets(feature_description, self.backlog)
+
+#         assignment_log: List[Dict[str, Any]] = []
+
+#         for ticket in tickets:
+#             ticket.estimated_story_points = self.estimator.estimate(ticket, self.backlog)
+#             ticket.assigned_team = self.assigner.assign_team(ticket)
+
+#             assignment_log.append({
+#                 "ticket_id": ticket.ticket_id,
+#                 "title": ticket.title,
+#                 "estimated_story_points": ticket.estimated_story_points,
+#                 "assigned_team": ticket.assigned_team,
+#                 "labels": ticket.labels,
+#                 "dependencies": ticket.dependencies
+#             })
+
+#         # Deliverable: assignment mapping logs
+#         out_dir = CONFIG.get("outputs_path", "./outputs/")
+#         write_json(os.path.join(out_dir, "assignment_log.json"), assignment_log)
+
+#         return tickets
+
+#     def detect_blockers(self) -> List[BlockerAlert]:
+#         """Scan backlog for blockers and at-risk items."""
+#         blockers = self.blocker_det.detect_blockers(self.backlog)
+
+#         # Deliverables: validation reports
+#         out_dir = CONFIG.get("outputs_path", "./outputs/")
+#         write_json(os.path.join(out_dir, "blocker_report.json"), [asdict(b) for b in blockers])
+#         write_json(os.path.join(out_dir, "dependency_report.json"),
+#                    getattr(self.blocker_det, "dependency_list_export", []))
+
+#         return blockers
+
+#     def generate_summary(self) -> DailySummary:
+#         """Generate daily leadership summary."""
+#         blockers = self.detect_blockers()
+#         return self.summary_gen.generate_daily_summary(self.backlog, blockers)
+
+#     def export_results(self, tickets: List[GeneratedTicket] = None,
+#                    blockers: List[BlockerAlert] = None) -> Dict:
+#         """Export results in EVALUATION FORMAT."""
+#         if blockers is None:
+#             blockers = self.detect_blockers()
+
+#     # Generate summary
+#         summary = self.generate_summary()
+
+#         return {
+#         "team_id": CONFIG.get("team_id", "VisionX"),
+#         "track": "track_4_pm_agent",
+#         "results": {
+#             "generated_tickets": [asdict(t) for t in (tickets or [])],
+#             "story_points": {t.ticket_id: t.estimated_story_points for t in (tickets or [])},
+#             "team_assignments": {t.ticket_id: t.assigned_team for t in (tickets or [])},
+#             "blockers_detected": [asdict(b) for b in (blockers or [])],
+
+#             # ✅ proper dependency edges (from backlog dependency detection)
+#             "dependencies": getattr(self.blocker_det, "dependency_list_export", []),
+
+#             # ✅ must be STRING, not dict
+#             "daily_summary": summary_to_text(summary)
+#         }
+#     }
+
+
+# # ─────────────────────────────────────────────────────
+# # MAIN (Two dataset setup)
+# # ─────────────────────────────────────────────────────
+# if __name__ == "__main__":
+#     agent = PMAgent()
+
+#     # 1️ Load BACKLOG dataset (project issues)
+#     agent.load_backlog(CONFIG["backlog_path"], source_type="csv")
+
+#     print("=" * 50)
+#     print("AI Project Manager Agent — Demo (Two Dataset Setup)")
+#     print("=" * 50)
+
+#     # 2️Generate tickets (ML story-point model uses GitHub dataset + backlog calibration)
+#     feature = "Build a user authentication system with login and token-based access"
+#     tickets = agent.break_down_feature(feature)
+
+#     print("\nGenerated Tickets:")
+#     for t in tickets:
+#         print(f"  {t.ticket_id} | {t.title}")
+#         print(f"    Story Points: {t.estimated_story_points}")
+#         print(f"    Assigned Team: {t.assigned_team}")
+
+#     # 3Detect blockers from BACKLOG dataset
+#     blockers = agent.detect_blockers()
+
+#     print("\nDetected Blockers:")
+#     for b in blockers:
+#         print(f"  ⚠️ [{b.severity.upper()}] {b.issue_id}: {b.description}")
+
+#     # 4️ Export in REQUIRED FORMAT
+#     output = agent.export_results(
+#         tickets=tickets,
+#         blockers=blockers
+#     )
+
+#     print("\nFinal Export Output:")
+#     print(json.dumps(output, indent=2))
+
+#     print("\nArtifacts saved to:", CONFIG.get("outputs_path"))
+#     print(" - assignment_log.json")
+#     print(" - blocker_report.json")
+#     print(" - dependency_report.json")
+#     print(" - sample_export.json")
+
+
 class PMAgent:
-    """Main Project Manager Agent orchestrator."""
+    """
+    Main Project Manager Agent orchestrator.
+
+    Separates:
+    - historical backlog analysis
+    - generated feature tickets
+    - feature dependencies
+    - feature blockers
+    """
 
     def __init__(self):
         self.reader = BacklogReader()
@@ -858,132 +1279,370 @@ class PMAgent:
         self.assigner = RuleBasedTeamAssigner()
         self.blocker_det = AnalyticsBlockerDetector()
         self.summary_gen = LLMSummaryGenerator()
+
+        # Historical/project backlog
         self.backlog: List[Issue] = []
+
+        # Newly generated feature tickets
+        self.generated_tickets: List[GeneratedTicket] = []
+
+        # Feature-specific analysis
+        self.feature_blockers: List[BlockerAlert] = []
+        self.feature_dependencies: List[Dict[str, Any]] = []
+
         logger.info("PM Agent initialized")
 
         ensure_dir(CONFIG.get("outputs_path", "./outputs/"))
 
-    def load_backlog(self, source: str, source_type: str = "csv") -> int:
-        """Load backlog from data source. Returns count of issues loaded."""
+    # ---------------------------------------------------------
+    # LOAD BACKLOG
+    # ---------------------------------------------------------
+    def load_backlog(
+        self,
+        source: str,
+        source_type: str = "csv"
+    ) -> int:
+        """
+        Load historical/project backlog.
+
+        This dataset is used for:
+        - story point estimation
+        - backlog health
+        - historical calibration
+
+        It is NOT automatically used as the blocker list for
+        the newly generated feature.
+        """
+
         if source_type == "csv":
             self.backlog = self.reader.from_csv(source)
+
         elif source_type == "json":
             self.backlog = self.reader.from_json(source)
+
         elif source_type == "api":
             self.backlog = self.reader.from_api(source)
-        logger.info(f"Loaded {len(self.backlog)} issues from {source_type}")
+
+        else:
+            raise ValueError(
+                f"Unsupported backlog type: {source_type}"
+            )
+
+        logger.info(
+            f"Loaded {len(self.backlog)} issues from {source_type}"
+        )
+
         return len(self.backlog)
 
-    def break_down_feature(self, feature_description: str) -> List[GeneratedTicket]:
-        """Generate tickets from a high-level feature description."""
-        tickets = self.ticket_gen.generate_tickets(feature_description, self.backlog)
+    # ---------------------------------------------------------
+    # GENERATE FEATURE TICKETS
+    # ---------------------------------------------------------
+    def break_down_feature(
+        self,
+        feature_description: str
+    ) -> List[GeneratedTicket]:
+        """
+        Generate actionable tickets for the requested feature.
+
+        Story-point estimation still uses the historical backlog.
+        """
+
+        tickets = self.ticket_gen.generate_tickets(
+            feature_description,
+            self.backlog
+        )
 
         assignment_log: List[Dict[str, Any]] = []
 
         for ticket in tickets:
-            ticket.estimated_story_points = self.estimator.estimate(ticket, self.backlog)
-            ticket.assigned_team = self.assigner.assign_team(ticket)
 
-            assignment_log.append({
-                "ticket_id": ticket.ticket_id,
-                "title": ticket.title,
-                "estimated_story_points": ticket.estimated_story_points,
-                "assigned_team": ticket.assigned_team,
-                "labels": ticket.labels,
-                "dependencies": ticket.dependencies
-            })
+            # ---------------------------------------------
+            # Story point estimation
+            # ---------------------------------------------
+            ticket.estimated_story_points = (
+                self.estimator.estimate(
+                    ticket,
+                    self.backlog
+                )
+            )
 
-        # Deliverable: assignment mapping logs
-        out_dir = CONFIG.get("outputs_path", "./outputs/")
-        write_json(os.path.join(out_dir, "assignment_log.json"), assignment_log)
+            # ---------------------------------------------
+            # Team assignment
+            # ---------------------------------------------
+            ticket.assigned_team = (
+                self.assigner.assign_team(ticket)
+            )
+
+            assignment_log.append(
+                {
+                    "ticket_id": ticket.ticket_id,
+                    "title": ticket.title,
+                    "estimated_story_points":
+                        ticket.estimated_story_points,
+                    "assigned_team":
+                        ticket.assigned_team,
+                    "labels":
+                        ticket.labels,
+                    "dependencies":
+                        ticket.dependencies
+                }
+            )
+
+        # Save generated tickets
+        self.generated_tickets = tickets
+
+        # ---------------------------------------------
+        # Feature dependency analysis
+        # ---------------------------------------------
+        self.feature_blockers = (
+            self.blocker_det.analyze_generated_feature(
+                tickets
+            )
+        )
+
+        self.feature_dependencies = (
+            getattr(
+                self.blocker_det,
+                "dependency_list_export",
+                []
+            )
+        )
+
+        # ---------------------------------------------
+        # Deliverable: assignment mapping
+        # ---------------------------------------------
+        out_dir = CONFIG.get(
+            "outputs_path",
+            "./outputs/"
+        )
+
+        write_json(
+            os.path.join(
+                out_dir,
+                "assignment_log.json"
+            ),
+            assignment_log
+        )
+
+        # ---------------------------------------------
+        # Deliverable: feature dependency report
+        # ---------------------------------------------
+        write_json(
+            os.path.join(
+                out_dir,
+                "dependency_report.json"
+            ),
+            self.feature_dependencies
+        )
 
         return tickets
 
-    def detect_blockers(self) -> List[BlockerAlert]:
-        """Scan backlog for blockers and at-risk items."""
-        blockers = self.blocker_det.detect_blockers(self.backlog)
+    # ---------------------------------------------------------
+    # BACKLOG BLOCKERS
+    # ---------------------------------------------------------
+    def detect_blockers(
+        self
+    ) -> List[BlockerAlert]:
+        """
+        Detect genuine blockers in the historical backlog.
 
-        # Deliverables: validation reports
-        out_dir = CONFIG.get("outputs_path", "./outputs/")
-        write_json(os.path.join(out_dir, "blocker_report.json"), [asdict(b) for b in blockers])
-        write_json(os.path.join(out_dir, "dependency_report.json"),
-                   getattr(self.blocker_det, "dependency_list_export", []))
+        This method remains available for backlog-health analysis.
+        """
+
+        blockers = self.blocker_det.detect_blockers(
+            self.backlog
+        )
+
+        out_dir = CONFIG.get(
+            "outputs_path",
+            "./outputs/"
+        )
+
+        write_json(
+            os.path.join(
+                out_dir,
+                "blocker_report.json"
+            ),
+            [
+                asdict(b)
+                for b in blockers
+            ]
+        )
+
+        write_json(
+            os.path.join(
+                out_dir,
+                "dependency_report.json"
+            ),
+            getattr(
+                self.blocker_det,
+                "dependency_list_export",
+                []
+            )
+        )
 
         return blockers
 
-    def generate_summary(self) -> DailySummary:
-        """Generate daily leadership summary."""
-        blockers = self.detect_blockers()
-        return self.summary_gen.generate_daily_summary(self.backlog, blockers)
+    # ---------------------------------------------------------
+    # FEATURE BLOCKERS
+    # ---------------------------------------------------------
+    def detect_feature_blockers(
+        self
+    ) -> List[BlockerAlert]:
+        """
+        Return blockers specifically associated with the
+        newly generated feature.
 
-    def export_results(self, tickets: List[GeneratedTicket] = None,
-                   blockers: List[BlockerAlert] = None) -> Dict:
-        """Export results in EVALUATION FORMAT."""
+        Newly generated tickets normally have no blockers because
+        they are still in the planning stage.
+        """
+
+        if not self.generated_tickets:
+            return []
+
+        self.feature_blockers = (
+            self.blocker_det.analyze_generated_feature(
+                self.generated_tickets
+            )
+        )
+
+        self.feature_dependencies = (
+            getattr(
+                self.blocker_det,
+                "dependency_list_export",
+                []
+            )
+        )
+
+        return self.feature_blockers
+
+    # ---------------------------------------------------------
+    # DAILY SUMMARY
+    # ---------------------------------------------------------
+    def generate_summary(
+        self,
+        feature_blockers: Optional[List[BlockerAlert]] = None
+    ) -> DailySummary:
+        """
+        Generate leadership summary.
+
+        Backlog statistics still come from the historical backlog,
+        while Active Blockers correspond to the requested feature.
+        """
+
+        if feature_blockers is None:
+            feature_blockers = self.feature_blockers
+
+        return self.summary_gen.generate_daily_summary(
+            self.backlog,
+            feature_blockers
+        )
+
+    # ---------------------------------------------------------
+    # EXPORT RESULTS
+    # ---------------------------------------------------------
+    def export_results(
+        self,
+        tickets: List[GeneratedTicket] = None,
+        blockers: List[BlockerAlert] = None
+    ) -> Dict:
+        """
+        Export final evaluation-safe result.
+
+        IMPORTANT:
+        - generated_tickets = requested feature
+        - blockers_detected = feature blockers
+        - dependencies = generated feature dependencies
+        - daily_summary = backlog statistics + feature blockers
+        """
+
+        tickets = tickets or self.generated_tickets or []
+
+        # ---------------------------------------------
+        # Feature blockers
+        # ---------------------------------------------
         if blockers is None:
-            blockers = self.detect_blockers()
 
-    # Generate summary
-        summary = self.generate_summary()
+            if tickets:
 
+                blockers = (
+                    self.blocker_det.analyze_generated_feature(
+                        tickets
+                    )
+                )
+
+            else:
+                blockers = []
+
+        # ---------------------------------------------
+        # Feature dependencies
+        # ---------------------------------------------
+        if tickets:
+
+            # Rebuild dependency list specifically from
+            # generated tickets.
+            self.blocker_det.analyze_generated_feature(
+                tickets
+            )
+
+            feature_dependencies = getattr(
+                self.blocker_det,
+                "dependency_list_export",
+                []
+            )
+
+        else:
+            feature_dependencies = []
+
+        # ---------------------------------------------
+        # Summary
+        # ---------------------------------------------
+        summary = self.generate_summary(
+            feature_blockers=blockers
+        )
+
+        # ---------------------------------------------
+        # Final output
+        # ---------------------------------------------
         return {
-        "team_id": CONFIG.get("team_id", "VisionX"),
-        "track": "track_4_pm_agent",
-        "results": {
-            "generated_tickets": [asdict(t) for t in (tickets or [])],
-            "story_points": {t.ticket_id: t.estimated_story_points for t in (tickets or [])},
-            "team_assignments": {t.ticket_id: t.assigned_team for t in (tickets or [])},
-            "blockers_detected": [asdict(b) for b in (blockers or [])],
+            "team_id": CONFIG.get(
+                "team_id",
+                "VisionX"
+            ),
 
-            # ✅ proper dependency edges (from backlog dependency detection)
-            "dependencies": getattr(self.blocker_det, "dependency_list_export", []),
+            "track": "track_4_pm_agent",
 
-            # ✅ must be STRING, not dict
-            "daily_summary": summary_to_text(summary)
+            "results": {
+
+                "generated_tickets": [
+                    asdict(t)
+                    for t in tickets
+                ],
+
+                "story_points": {
+                    t.ticket_id:
+                        t.estimated_story_points
+                    for t in tickets
+                },
+
+                "team_assignments": {
+                    t.ticket_id:
+                        t.assigned_team
+                    for t in tickets
+                },
+
+                # Feature-specific blockers only
+                "blockers_detected": [
+                    asdict(b)
+                    for b in blockers
+                ],
+
+                # Feature-specific dependencies only
+                "dependencies": feature_dependencies,
+
+                # String format required by your schema
+                "daily_summary": summary_to_text(
+                    summary
+                )
+            }
         }
-    }
-
-
-# ─────────────────────────────────────────────────────
-# MAIN (Two dataset setup)
-# ─────────────────────────────────────────────────────
-if __name__ == "__main__":
-    agent = PMAgent()
-
-    # 1️ Load BACKLOG dataset (project issues)
-    agent.load_backlog(CONFIG["backlog_path"], source_type="csv")
-
-    print("=" * 50)
-    print("AI Project Manager Agent — Demo (Two Dataset Setup)")
-    print("=" * 50)
-
-    # 2️Generate tickets (ML story-point model uses GitHub dataset + backlog calibration)
-    feature = "Build a user authentication system with login and token-based access"
-    tickets = agent.break_down_feature(feature)
-
-    print("\nGenerated Tickets:")
-    for t in tickets:
-        print(f"  {t.ticket_id} | {t.title}")
-        print(f"    Story Points: {t.estimated_story_points}")
-        print(f"    Assigned Team: {t.assigned_team}")
-
-    # 3Detect blockers from BACKLOG dataset
-    blockers = agent.detect_blockers()
-
-    print("\nDetected Blockers:")
-    for b in blockers:
-        print(f"  ⚠️ [{b.severity.upper()}] {b.issue_id}: {b.description}")
-
-    # 4️ Export in REQUIRED FORMAT
-    output = agent.export_results(
-        tickets=tickets,
-        blockers=blockers
-    )
-
-    print("\nFinal Export Output:")
-    print(json.dumps(output, indent=2))
-
-    print("\nArtifacts saved to:", CONFIG.get("outputs_path"))
-    print(" - assignment_log.json")
-    print(" - blocker_report.json")
-    print(" - dependency_report.json")
-    print(" - sample_export.json")

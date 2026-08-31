@@ -148,7 +148,7 @@ def run_agent(req: RunRequest):
 
         print("DEBUG tickets generated:", len(tickets))
 
-        blockers = agent.detect_blockers()
+        blockers = agent.detect_feature_blockers()
 
         print("DEBUG blockers detected:", len(blockers))
 
