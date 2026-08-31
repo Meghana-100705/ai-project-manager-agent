@@ -639,32 +639,206 @@ class LLMStoryPointEstimator(StoryPointEstimator):
         return self._fallback_estimate(ticket, historical_data)
 
 
+# class RuleBasedTeamAssigner(TeamAssigner):
+#     """Assign tickets to teams based on labels and skills."""
+
+#     TEAM_SKILLS = {
+#         "frontend": ["UI", "UX", "React", "CSS", "frontend", "design", "accessibility"],
+#         "backend": ["API", "database", "server", "backend", "microservice", "auth", "jwt", "oauth", "security"],
+#         "ml_team": ["ML", "model", "training", "data", "pipeline", "AI"],
+#         "devops": ["deployment", "CI/CD", "infrastructure", "monitoring", "cloud", "secrets"],
+#         "mobile": ["iOS", "Android", "mobile", "app", "FCM"],
+#         "testing": ["test", "testing", "qa", "unit", "integration"],
+#     }
+
+#     # def assign_team(self, ticket: GeneratedTicket, teams: Dict[str, List[str]] = None) -> str:
+#     #     skill_map = teams or self.TEAM_SKILLS
+#     #     text = f"{ticket.title} {ticket.description} {' '.join(ticket.labels)}".lower()
+#     #     scores: Dict[str, int] = {}
+#     #     for team, keywords in skill_map.items():
+#     #         scores[team] = sum(1 for kw in keywords if kw.lower() in text)
+#     #     if max(scores.values()) == 0:
+#     #         return "backend"  # default
+#     #     return max(scores, key=scores.get)
+
+
+#     def assign_team(self, ticket: GeneratedTicket) -> str:
+#         """
+#         Assign the ticket to the most appropriate team.
+#         """
+
+#         text = " ".join([
+#             ticket.title or "",
+#             ticket.description or "",
+#             " ".join(ticket.labels or [])
+#         ]).lower()
+
+#         # ---------------------------------------------
+#         # Testing / QA
+#         # ---------------------------------------------
+#         testing_keywords = [
+#             "test",
+#             "testing",
+#             "qa",
+#             "quality assurance",
+#             "unit test",
+#             "integration test"
+#         ]
+
+#         if any(keyword in text for keyword in testing_keywords):
+#             return "testing"
+
+#         # ---------------------------------------------
+#         # ML / AI
+#         # ---------------------------------------------
+#         ml_keywords = [
+#             "machine learning",
+#             "ml model",
+#             "model training",
+#             "train model",
+#             "prediction",
+#             "predictive",
+#             "recommendation",
+#             "classification",
+#             "clustering",
+#             "deep learning",
+#             "neural network",
+#             "ai model"
+#         ]
+
+#         if any(keyword in text for keyword in ml_keywords):
+#             return "ml_team"
+
+#         # ---------------------------------------------
+#         # Frontend / UI
+#         # ---------------------------------------------
+#         frontend_keywords = [
+#             "frontend",
+#             "front-end",
+#             "ui",
+#             "ux",
+#             "user interface",
+#             "dashboard",
+#             "screen",
+#             "page",
+#             "component",
+#             "client-side",
+#             "accessibility",
+#             "responsive",
+#             "layout"
+#         ]
+
+#         if any(keyword in text for keyword in frontend_keywords):
+#             return "frontend"
+
+#         # ---------------------------------------------
+#         # Backend
+#         # ---------------------------------------------
+#         backend_keywords = [
+#             "backend",
+#             "back-end",
+#             "api",
+#             "database",
+#             "schema",
+#             "sql",
+#             "server",
+#             "authentication",
+#             "authorization",
+#             "jwt",
+#             "password",
+#             "payment",
+#             "webhook",
+#             "integration",
+#             "middleware",
+#             "service",
+#             "endpoint"
+#         ]
+
+#         if any(keyword in text for keyword in backend_keywords):
+#             return "backend"
+
+#         # ---------------------------------------------
+#         # Default
+#         # ---------------------------------------------
+#         return "backend"
+
+
+
 class RuleBasedTeamAssigner(TeamAssigner):
-    """Assign tickets to teams based on labels and skills."""
+    """Assign tickets to teams based on task intent and technical keywords."""
 
     TEAM_SKILLS = {
-        "frontend": ["UI", "UX", "React", "CSS", "frontend", "design", "accessibility"],
-        "backend": ["API", "database", "server", "backend", "microservice", "auth", "jwt", "oauth", "security"],
-        "ml_team": ["ML", "model", "training", "data", "pipeline", "AI"],
-        "devops": ["deployment", "CI/CD", "infrastructure", "monitoring", "cloud", "secrets"],
-        "mobile": ["iOS", "Android", "mobile", "app", "FCM"],
-        "testing": ["test", "testing", "qa", "unit", "integration"],
+        "frontend": [
+            "UI",
+            "UX",
+            "React",
+            "CSS",
+            "frontend",
+            "design",
+            "accessibility",
+        ],
+        "backend": [
+            "API",
+            "database",
+            "server",
+            "backend",
+            "microservice",
+            "auth",
+            "authentication",
+            "authorization",
+            "jwt",
+            "oauth",
+            "security",
+            "password",
+            "middleware",
+            "endpoint",
+            "webhook",
+            "payment",
+        ],
+        "ml_team": [
+            "ML",
+            "model",
+            "training",
+            "data",
+            "pipeline",
+            "AI",
+            "machine learning",
+            "prediction",
+            "recommendation",
+            "classification",
+            "clustering",
+        ],
+        "devops": [
+            "deployment",
+            "CI/CD",
+            "infrastructure",
+            "monitoring",
+            "cloud",
+            "docker",
+            "kubernetes",
+            "secrets",
+        ],
+        "mobile": [
+            "iOS",
+            "Android",
+            "mobile",
+            "app",
+            "FCM",
+        ],
+        "testing": [
+            "test",
+            "testing",
+            "qa",
+            "quality assurance",
+            "unit test",
+            "integration test",
+        ],
     }
-
-    # def assign_team(self, ticket: GeneratedTicket, teams: Dict[str, List[str]] = None) -> str:
-    #     skill_map = teams or self.TEAM_SKILLS
-    #     text = f"{ticket.title} {ticket.description} {' '.join(ticket.labels)}".lower()
-    #     scores: Dict[str, int] = {}
-    #     for team, keywords in skill_map.items():
-    #         scores[team] = sum(1 for kw in keywords if kw.lower() in text)
-    #     if max(scores.values()) == 0:
-    #         return "backend"  # default
-    #     return max(scores, key=scores.get)
-
 
     def assign_team(self, ticket: GeneratedTicket) -> str:
         """
-        Assign the ticket to the most appropriate team.
+        Assign the ticket to the most appropriate team
+        using intent-based keyword rules.
         """
 
         text = " ".join([
@@ -682,11 +856,105 @@ class RuleBasedTeamAssigner(TeamAssigner):
             "qa",
             "quality assurance",
             "unit test",
-            "integration test"
+            "integration test",
+            "test cases",
+            "edge cases",
         ]
 
         if any(keyword in text for keyword in testing_keywords):
             return "testing"
+
+        # ---------------------------------------------
+        # DevOps / Infrastructure
+        # ---------------------------------------------
+        devops_keywords = [
+            "deployment",
+            "deploy",
+            "ci/cd",
+            "pipeline",
+            "infrastructure",
+            "docker",
+            "kubernetes",
+            "monitoring",
+            "cloud",
+            "devops",
+            "production deployment",
+        ]
+
+        if any(keyword in text for keyword in devops_keywords):
+            return "devops"
+
+        # ---------------------------------------------
+        # Mobile
+        # ---------------------------------------------
+        mobile_keywords = [
+            "ios",
+            "android",
+            "mobile app",
+            "mobile application",
+            "react native",
+            "flutter",
+            "fcm",
+        ]
+
+        if any(keyword in text for keyword in mobile_keywords):
+            return "mobile"
+
+        # ---------------------------------------------
+        # Authentication / Security
+        # MUST be checked before frontend
+        # ---------------------------------------------
+        authentication_keywords = [
+            "authentication",
+            "authorization",
+            "login",
+            "logout",
+            "sign in",
+            "sign up",
+            "registration",
+            "password",
+            "password hashing",
+            "jwt",
+            "refresh token",
+            "access token",
+            "oauth",
+            "role-based access",
+            "role based access",
+            "rbac",
+            "auth middleware",
+            "auth guard",
+            "security",
+        ]
+
+        if any(keyword in text for keyword in authentication_keywords):
+            return "backend"
+
+        # ---------------------------------------------
+        # Payment / Backend Integration
+        # ---------------------------------------------
+        payment_backend_keywords = [
+            "payment api",
+            "payment provider",
+            "payment gateway",
+            "transaction",
+            "webhook",
+            "payment verification",
+            "credit card",
+            "upi",
+            "backend api",
+            "api endpoint",
+            "rest api",
+            "graphql api",
+            "microservice",
+            "server",
+            "database",
+            "sql",
+            "schema",
+            "middleware",
+        ]
+
+        if any(keyword in text for keyword in payment_backend_keywords):
+            return "backend"
 
         # ---------------------------------------------
         # ML / AI
@@ -698,12 +966,16 @@ class RuleBasedTeamAssigner(TeamAssigner):
             "train model",
             "prediction",
             "predictive",
-            "recommendation",
+            "recommendation model",
+            "recommendation system",
             "classification",
             "clustering",
             "deep learning",
             "neural network",
-            "ai model"
+            "ai model",
+            "generative ai",
+            "embedding",
+            "llm",
         ]
 
         if any(keyword in text for keyword in ml_keywords):
@@ -725,14 +997,20 @@ class RuleBasedTeamAssigner(TeamAssigner):
             "client-side",
             "accessibility",
             "responsive",
-            "layout"
+            "layout",
+            "css",
+            "react",
+            "button",
+            "form",
+            "navigation",
+            "visual design",
         ]
 
         if any(keyword in text for keyword in frontend_keywords):
             return "frontend"
 
         # ---------------------------------------------
-        # Backend
+        # General Backend
         # ---------------------------------------------
         backend_keywords = [
             "backend",
@@ -742,16 +1020,12 @@ class RuleBasedTeamAssigner(TeamAssigner):
             "schema",
             "sql",
             "server",
-            "authentication",
-            "authorization",
-            "jwt",
-            "password",
-            "payment",
-            "webhook",
-            "integration",
-            "middleware",
+            "endpoint",
             "service",
-            "endpoint"
+            "microservice",
+            "middleware",
+            "integration",
+            "webhook",
         ]
 
         if any(keyword in text for keyword in backend_keywords):
@@ -761,6 +1035,11 @@ class RuleBasedTeamAssigner(TeamAssigner):
         # Default
         # ---------------------------------------------
         return "backend"
+
+
+
+
+
 
 # class AnalyticsBlockerDetector(BlockerDetector):
 #     """Detect blockers by analyzing issue states and dependencies."""
@@ -1361,6 +1640,488 @@ class LLMSummaryGenerator(SummaryGenerator):
 #     print(" - sample_export.json")
 
 
+# class PMAgent:
+#     """
+#     Main Project Manager Agent orchestrator.
+
+#     Separates:
+#     - historical backlog analysis
+#     - generated feature tickets
+#     - feature dependencies
+#     - feature blockers
+#     """
+
+#     def __init__(self):
+#         self.reader = BacklogReader()
+#         self.ticket_gen = LLMTicketGenerator()
+#         self.estimator = LLMStoryPointEstimator()
+#         self.assigner = RuleBasedTeamAssigner()
+#         self.blocker_det = AnalyticsBlockerDetector()
+#         self.summary_gen = LLMSummaryGenerator()
+
+#         # Historical/project backlog
+#         self.backlog: List[Issue] = []
+
+#         # Newly generated feature tickets
+#         self.generated_tickets: List[GeneratedTicket] = []
+
+#         # Feature-specific analysis
+#         self.feature_blockers: List[BlockerAlert] = []
+#         self.feature_dependencies: List[Dict[str, Any]] = []
+
+#         logger.info("PM Agent initialized")
+
+#         ensure_dir(CONFIG.get("outputs_path", "./outputs/"))
+
+#     # ---------------------------------------------------------
+#     # LOAD BACKLOG
+#     # ---------------------------------------------------------
+#     def load_backlog(
+#         self,
+#         source: str,
+#         source_type: str = "csv"
+#     ) -> int:
+#         """
+#         Load historical/project backlog.
+
+#         This dataset is used for:
+#         - story point estimation
+#         - backlog health
+#         - historical calibration
+
+#         It is NOT automatically used as the blocker list for
+#         the newly generated feature.
+#         """
+
+#         if source_type == "csv":
+#             self.backlog = self.reader.from_csv(source)
+
+#         elif source_type == "json":
+#             self.backlog = self.reader.from_json(source)
+
+#         elif source_type == "api":
+#             self.backlog = self.reader.from_api(source)
+
+#         else:
+#             raise ValueError(
+#                 f"Unsupported backlog type: {source_type}"
+#             )
+
+#         logger.info(
+#             f"Loaded {len(self.backlog)} issues from {source_type}"
+#         )
+
+#         return len(self.backlog)
+
+#     # ---------------------------------------------------------
+#     # GENERATE FEATURE TICKETS
+#     # ---------------------------------------------------------
+#     def break_down_feature(
+#         self,
+#         feature_description: str
+#     ) -> List[GeneratedTicket]:
+#         """
+#         Generate actionable tickets for the requested feature.
+
+#         Story-point estimation still uses the historical backlog.
+#         """
+
+#         tickets = self.ticket_gen.generate_tickets(
+#             feature_description,
+#             self.backlog
+#         )
+
+#         assignment_log: List[Dict[str, Any]] = []
+
+#         for ticket in tickets:
+
+#             # ---------------------------------------------
+#             # Story point estimation
+#             # ---------------------------------------------
+#             ticket.estimated_story_points = (
+#                 self.estimator.estimate(
+#                     ticket,
+#                     self.backlog
+#                 )
+#             )
+
+#             # ---------------------------------------------
+#             # Team assignment
+#             # ---------------------------------------------
+#             ticket.assigned_team = (
+#                 self.assigner.assign_team(ticket)
+#             )
+
+#             assignment_log.append(
+#                 {
+#                     "ticket_id": ticket.ticket_id,
+#                     "title": ticket.title,
+#                     "estimated_story_points":
+#                         ticket.estimated_story_points,
+#                     "assigned_team":
+#                         ticket.assigned_team,
+#                     "labels":
+#                         ticket.labels,
+#                     "dependencies":
+#                         ticket.dependencies
+#                 }
+#             )
+
+#         # Save generated tickets
+#         self.generated_tickets = tickets
+
+#         # ---------------------------------------------
+#         # Feature dependency analysis
+#         # ---------------------------------------------
+#         self.feature_blockers = (
+#             self.blocker_det.analyze_generated_feature(
+#                 tickets
+#             )
+#         )
+
+#         self.feature_dependencies = (
+#             getattr(
+#                 self.blocker_det,
+#                 "dependency_list_export",
+#                 []
+#             )
+#         )
+
+#         # ---------------------------------------------
+#         # Deliverable: assignment mapping
+#         # ---------------------------------------------
+#         out_dir = CONFIG.get(
+#             "outputs_path",
+#             "./outputs/"
+#         )
+
+#         write_json(
+#             os.path.join(
+#                 out_dir,
+#                 "assignment_log.json"
+#             ),
+#             assignment_log
+#         )
+
+#         # ---------------------------------------------
+#         # Deliverable: feature dependency report
+#         # ---------------------------------------------
+#         write_json(
+#             os.path.join(
+#                 out_dir,
+#                 "dependency_report.json"
+#             ),
+#             self.feature_dependencies
+#         )
+
+#         return tickets
+
+#     # ---------------------------------------------------------
+#     # BACKLOG BLOCKERS
+#     # ---------------------------------------------------------
+#     def detect_blockers(
+#         self
+#     ) -> List[BlockerAlert]:
+#         """
+#         Detect genuine blockers in the historical backlog.
+
+#         This method remains available for backlog-health analysis.
+#         """
+
+#         blockers = self.blocker_det.detect_blockers(
+#             self.backlog
+#         )
+
+#         out_dir = CONFIG.get(
+#             "outputs_path",
+#             "./outputs/"
+#         )
+
+#         write_json(
+#             os.path.join(
+#                 out_dir,
+#                 "blocker_report.json"
+#             ),
+#             [
+#                 asdict(b)
+#                 for b in blockers
+#             ]
+#         )
+
+#         write_json(
+#             os.path.join(
+#                 out_dir,
+#                 "dependency_report.json"
+#             ),
+#             getattr(
+#                 self.blocker_det,
+#                 "dependency_list_export",
+#                 []
+#             )
+#         )
+
+#         return blockers
+
+#     # ---------------------------------------------------------
+#     # FEATURE BLOCKERS
+#     # ---------------------------------------------------------
+#     def detect_feature_blockers(
+#         self
+#     ) -> List[BlockerAlert]:
+#         """
+#         Return blockers specifically associated with the
+#         newly generated feature.
+
+#         Newly generated tickets normally have no blockers because
+#         they are still in the planning stage.
+#         """
+
+#         if not self.generated_tickets:
+#             return []
+
+#         self.feature_blockers = (
+#             self.blocker_det.analyze_generated_feature(
+#                 self.generated_tickets
+#             )
+#         )
+
+#         self.feature_dependencies = (
+#             getattr(
+#                 self.blocker_det,
+#                 "dependency_list_export",
+#                 []
+#             )
+#         )
+
+#         return self.feature_blockers
+
+#     # ---------------------------------------------------------
+#     # DAILY SUMMARY
+#     # ---------------------------------------------------------
+#     def generate_summary(
+#         self,
+#         feature_blockers: Optional[List[BlockerAlert]] = None
+#     ) -> DailySummary:
+#         """
+#         Generate leadership summary.
+
+#         Backlog statistics still come from the historical backlog,
+#         while Active Blockers correspond to the requested feature.
+#         """
+
+#         if feature_blockers is None:
+#             feature_blockers = self.feature_blockers
+
+#         return self.summary_gen.generate_daily_summary(
+#             self.backlog,
+#             feature_blockers
+#         )
+
+#     # ---------------------------------------------------------
+#     # EXPORT RESULTS
+#     # ---------------------------------------------------------
+#     def export_results(
+#         self,
+#         tickets: List[GeneratedTicket] = None,
+#         blockers: List[BlockerAlert] = None
+#     ) -> Dict:
+#         """
+#         Export final evaluation-safe result.
+
+#         IMPORTANT:
+#         - generated_tickets = requested feature
+#         - blockers_detected = feature blockers
+#         - dependencies = generated feature dependencies
+#         - daily_summary = backlog statistics + feature blockers
+#         """
+
+#         tickets = tickets or self.generated_tickets or []
+
+#         # ---------------------------------------------
+#         # Feature blockers
+#         # ---------------------------------------------
+#         if blockers is None:
+
+#             if tickets:
+
+#                 blockers = (
+#                     self.blocker_det.analyze_generated_feature(
+#                         tickets
+#                     )
+#                 )
+
+#             else:
+#                 blockers = []
+
+#         # ---------------------------------------------
+#         # Feature dependencies
+#         # ---------------------------------------------
+#         if tickets:
+
+#             # Rebuild dependency list specifically from
+#             # generated tickets.
+#             self.blocker_det.analyze_generated_feature(
+#                 tickets
+#             )
+
+#             feature_dependencies = getattr(
+#                 self.blocker_det,
+#                 "dependency_list_export",
+#                 []
+#             )
+
+#         else:
+#             feature_dependencies = []
+
+#         # ---------------------------------------------
+#         # Summary
+#         # ---------------------------------------------
+#         summary = self.generate_summary(
+#             feature_blockers=blockers
+#         )
+
+#         # ---------------------------------------------
+#         # Final output
+#         # ---------------------------------------------
+#         return {
+#             "team_id": CONFIG.get(
+#                 "team_id",
+#                 "VisionX"
+#             ),
+
+#             "track": "track_4_pm_agent",
+
+#             "results": {
+
+#                 "generated_tickets": [
+#                     asdict(t)
+#                     for t in tickets
+#                 ],
+
+#                 "story_points": {
+#                     t.ticket_id:
+#                         t.estimated_story_points
+#                     for t in tickets
+#                 },
+
+#                 "team_assignments": {
+#                     t.ticket_id:
+#                         t.assigned_team
+#                     for t in tickets
+#                 },
+
+#                 # Feature-specific blockers only
+#                 "blockers_detected": [
+#                     asdict(b)
+#                     for b in blockers
+#                 ],
+
+#                 # Feature-specific dependencies only
+#                 "dependencies": feature_dependencies,
+
+#                 # String format required by your schema
+#                 "daily_summary": summary_to_text(
+#                     summary
+#                 )
+#             }
+#         }
+
+
+#     def generate_feature_summary(
+#         self,
+#         tickets: List[GeneratedTicket],
+#         blockers: List[BlockerAlert]
+#     ) -> str:
+#         """
+#         Generate a concise executive summary specifically
+#         for the feature being analyzed.
+#         """
+
+#         total_tickets = len(tickets)
+
+#         total_points = sum(
+#             t.estimated_story_points or 0
+#             for t in tickets
+#         )
+
+#         high_priority = sum(
+#             1
+#             for t in tickets
+#             if str(t.priority).lower() == "high"
+#         )
+
+#         teams = {}
+
+#         for ticket in tickets:
+#             team = ticket.assigned_team or "unassigned"
+#             teams[team] = teams.get(team, 0) + 1
+
+#         dependency_count = sum(
+#             len(t.dependencies or [])
+#             for t in tickets
+#         )
+
+#         summary_lines = [
+#             "Feature Analysis Summary",
+#             "",
+#             f"Generated Tickets: {total_tickets}",
+#             f"Total Story Points: {total_points}",
+#             f"High Priority Tickets: {high_priority}",
+#             f"Dependencies: {dependency_count}",
+#             f"Active Blockers: {len(blockers)}",
+#             "",
+#             "Team Distribution:"
+#         ]
+
+#         for team, count in teams.items():
+#             summary_lines.append(
+#                 f"- {team}: {count} ticket(s)"
+#             )
+
+#         summary_lines.extend([
+#             "",
+#             "Immediate Priorities:"
+#         ])
+
+#         priority_tickets = sorted(
+#             tickets,
+#             key=lambda t: (
+#                 0
+#                 if str(t.priority).lower() == "high"
+#                 else 1
+#             )
+#         )
+
+#         for ticket in priority_tickets[:5]:
+#             summary_lines.append(
+#                 f"- {ticket.ticket_id}: {ticket.title}"
+#             )
+
+#         if blockers:
+#             summary_lines.extend([
+#                 "",
+#                 "Active Blockers:"
+#             ])
+
+#             for blocker in blockers:
+#                 summary_lines.append(
+#                     f"- {blocker.issue_id}: "
+#                     f"{blocker.description}"
+#                 )
+
+#         else:
+#             summary_lines.extend([
+#                 "",
+#                 "Active Blockers:",
+#                 "- None detected"
+#             ])
+
+#         return "\n".join(summary_lines)
+
+
+# ─────────────────────────────────────────────────────
+# MAIN PM AGENT
+# ─────────────────────────────────────────────────────
 class PMAgent:
     """
     Main Project Manager Agent orchestrator.
@@ -1370,6 +2131,7 @@ class PMAgent:
     - generated feature tickets
     - feature dependencies
     - feature blockers
+    - feature-specific executive summary
     """
 
     def __init__(self):
@@ -1392,7 +2154,12 @@ class PMAgent:
 
         logger.info("PM Agent initialized")
 
-        ensure_dir(CONFIG.get("outputs_path", "./outputs/"))
+        ensure_dir(
+            CONFIG.get(
+                "outputs_path",
+                "./outputs/"
+            )
+        )
 
     # ---------------------------------------------------------
     # LOAD BACKLOG
@@ -1407,29 +2174,40 @@ class PMAgent:
 
         This dataset is used for:
         - story point estimation
-        - backlog health
         - historical calibration
+        - backlog health analysis
 
-        It is NOT automatically used as the blocker list for
-        the newly generated feature.
+        It is NOT automatically used as the blocker list
+        for the newly generated feature.
         """
 
         if source_type == "csv":
-            self.backlog = self.reader.from_csv(source)
+
+            self.backlog = (
+                self.reader.from_csv(source)
+            )
 
         elif source_type == "json":
-            self.backlog = self.reader.from_json(source)
+
+            self.backlog = (
+                self.reader.from_json(source)
+            )
 
         elif source_type == "api":
-            self.backlog = self.reader.from_api(source)
+
+            self.backlog = (
+                self.reader.from_api(source)
+            )
 
         else:
+
             raise ValueError(
                 f"Unsupported backlog type: {source_type}"
             )
 
         logger.info(
-            f"Loaded {len(self.backlog)} issues from {source_type}"
+            f"Loaded {len(self.backlog)} issues "
+            f"from {source_type}"
         )
 
         return len(self.backlog)
@@ -1444,12 +2222,16 @@ class PMAgent:
         """
         Generate actionable tickets for the requested feature.
 
-        Story-point estimation still uses the historical backlog.
+        Story-point estimation uses the historical backlog.
+        Team assignment is performed on each generated ticket.
+        Dependencies are analyzed specifically for the feature.
         """
 
-        tickets = self.ticket_gen.generate_tickets(
-            feature_description,
-            self.backlog
+        tickets = (
+            self.ticket_gen.generate_tickets(
+                feature_description,
+                self.backlog
+            )
         )
 
         assignment_log: List[Dict[str, Any]] = []
@@ -1475,24 +2257,33 @@ class PMAgent:
 
             assignment_log.append(
                 {
-                    "ticket_id": ticket.ticket_id,
-                    "title": ticket.title,
+                    "ticket_id":
+                        ticket.ticket_id,
+
+                    "title":
+                        ticket.title,
+
                     "estimated_story_points":
                         ticket.estimated_story_points,
+
                     "assigned_team":
                         ticket.assigned_team,
+
                     "labels":
                         ticket.labels,
+
                     "dependencies":
                         ticket.dependencies
                 }
             )
 
+        # ---------------------------------------------
         # Save generated tickets
+        # ---------------------------------------------
         self.generated_tickets = tickets
 
         # ---------------------------------------------
-        # Feature dependency analysis
+        # Feature dependency / blocker analysis
         # ---------------------------------------------
         self.feature_blockers = (
             self.blocker_det.analyze_generated_feature(
@@ -1546,11 +2337,14 @@ class PMAgent:
         """
         Detect genuine blockers in the historical backlog.
 
-        This method remains available for backlog-health analysis.
+        This method remains available for backlog-health
+        analysis and does NOT control the feature summary.
         """
 
-        blockers = self.blocker_det.detect_blockers(
-            self.backlog
+        blockers = (
+            self.blocker_det.detect_blockers(
+                self.backlog
+            )
         )
 
         out_dir = CONFIG.get(
@@ -1590,14 +2384,15 @@ class PMAgent:
         self
     ) -> List[BlockerAlert]:
         """
-        Return blockers specifically associated with the
-        newly generated feature.
+        Return blockers specifically associated with
+        the newly generated feature.
 
-        Newly generated tickets normally have no blockers because
-        they are still in the planning stage.
+        Newly generated tickets normally have no blockers
+        because they are still in the planning stage.
         """
 
         if not self.generated_tickets:
+
             return []
 
         self.feature_blockers = (
@@ -1617,25 +2412,154 @@ class PMAgent:
         return self.feature_blockers
 
     # ---------------------------------------------------------
-    # DAILY SUMMARY
+    # ORIGINAL BACKLOG SUMMARY
     # ---------------------------------------------------------
     def generate_summary(
         self,
-        feature_blockers: Optional[List[BlockerAlert]] = None
+        feature_blockers: Optional[
+            List[BlockerAlert]
+        ] = None
     ) -> DailySummary:
         """
-        Generate leadership summary.
+        Generate the original leadership summary
+        from the historical backlog.
 
-        Backlog statistics still come from the historical backlog,
-        while Active Blockers correspond to the requested feature.
+        Kept for compatibility and backlog analysis.
+
+        The /run export does NOT use this summary.
         """
 
-        if feature_blockers is None:
-            feature_blockers = self.feature_blockers
-
-        return self.summary_gen.generate_daily_summary(
-            self.backlog,
+        blockers = (
             feature_blockers
+            if feature_blockers is not None
+            else self.detect_blockers()
+        )
+
+        return (
+            self.summary_gen.generate_daily_summary(
+                self.backlog,
+                blockers
+            )
+        )
+
+    # ---------------------------------------------------------
+    # FEATURE SUMMARY
+    # ---------------------------------------------------------
+    def generate_feature_summary(
+        self,
+        tickets: List[GeneratedTicket],
+        blockers: List[BlockerAlert]
+    ) -> str:
+        """
+        Generate a concise executive summary specifically
+        for the feature being analyzed.
+
+        IMPORTANT:
+        This summary uses ONLY the generated feature tickets
+        and feature blockers.
+
+        It does NOT include the 23,313 historical backlog
+        issues or their ISS-* priorities.
+        """
+
+        total_tickets = len(tickets)
+
+        total_points = sum(
+            t.estimated_story_points or 0
+            for t in tickets
+        )
+
+        high_priority = sum(
+            1
+            for t in tickets
+            if str(t.priority).lower() == "high"
+        )
+
+        teams: Dict[str, int] = {}
+
+        for ticket in tickets:
+
+            team = (
+                ticket.assigned_team
+                or "unassigned"
+            )
+
+            teams[team] = (
+                teams.get(team, 0) + 1
+            )
+
+        dependency_count = sum(
+            len(t.dependencies or [])
+            for t in tickets
+        )
+
+        summary_lines = [
+            "Feature Analysis Summary",
+            "",
+            f"Generated Tickets: {total_tickets}",
+            f"Total Story Points: {total_points}",
+            f"High Priority Tickets: {high_priority}",
+            f"Dependencies: {dependency_count}",
+            f"Active Blockers: {len(blockers)}",
+            "",
+            "Team Distribution:"
+        ]
+
+        for team, count in teams.items():
+
+            summary_lines.append(
+                f"- {team}: {count} ticket(s)"
+            )
+
+        summary_lines.extend(
+            [
+                "",
+                "Immediate Priorities:"
+            ]
+        )
+
+        priority_tickets = sorted(
+            tickets,
+            key=lambda t: (
+                0
+                if str(
+                    t.priority
+                ).lower() == "high"
+                else 1
+            )
+        )
+
+        for ticket in priority_tickets[:5]:
+
+            summary_lines.append(
+                f"- {ticket.ticket_id}: "
+                f"{ticket.title}"
+            )
+
+        summary_lines.extend(
+            [
+                "",
+                "Active Blockers:"
+            ]
+        )
+
+        if blockers:
+
+            for blocker in blockers:
+
+                summary_lines.append(
+                    f"- {blocker.issue_id}: "
+                    f"{blocker.description}"
+                )
+
+        else:
+
+            summary_lines.append(
+                "- None detected"
+            )
+
+        return "\n".join(
+            summary_lines
         )
 
     # ---------------------------------------------------------
@@ -1653,10 +2577,14 @@ class PMAgent:
         - generated_tickets = requested feature
         - blockers_detected = feature blockers
         - dependencies = generated feature dependencies
-        - daily_summary = backlog statistics + feature blockers
+        - daily_summary = feature-specific summary
         """
 
-        tickets = tickets or self.generated_tickets or []
+        tickets = (
+            tickets
+            or self.generated_tickets
+            or []
+        )
 
         # ---------------------------------------------
         # Feature blockers
@@ -1666,12 +2594,14 @@ class PMAgent:
             if tickets:
 
                 blockers = (
-                    self.blocker_det.analyze_generated_feature(
+                    self.blocker_det
+                    .analyze_generated_feature(
                         tickets
                     )
                 )
 
             else:
+
                 blockers = []
 
         # ---------------------------------------------
@@ -1679,8 +2609,8 @@ class PMAgent:
         # ---------------------------------------------
         if tickets:
 
-            # Rebuild dependency list specifically from
-            # generated tickets.
+            # Rebuild dependency list specifically
+            # from generated feature tickets.
             self.blocker_det.analyze_generated_feature(
                 tickets
             )
@@ -1692,13 +2622,17 @@ class PMAgent:
             )
 
         else:
+
             feature_dependencies = []
 
         # ---------------------------------------------
-        # Summary
+        # Feature-specific summary
         # ---------------------------------------------
-        summary = self.generate_summary(
-            feature_blockers=blockers
+        summary = (
+            self.generate_feature_summary(
+                tickets,
+                blockers
+            )
         )
 
         # ---------------------------------------------
@@ -1738,103 +2672,11 @@ class PMAgent:
                 ],
 
                 # Feature-specific dependencies only
-                "dependencies": feature_dependencies,
+                "dependencies":
+                    feature_dependencies,
 
-                # String format required by your schema
-                "daily_summary": summary_to_text(
+                # Must be a STRING
+                "daily_summary":
                     summary
-                )
             }
         }
-
-
-    def generate_feature_summary(
-        self,
-        tickets: List[GeneratedTicket],
-        blockers: List[BlockerAlert]
-    ) -> str:
-        """
-        Generate a concise executive summary specifically
-        for the feature being analyzed.
-        """
-
-        total_tickets = len(tickets)
-
-        total_points = sum(
-            t.estimated_story_points or 0
-            for t in tickets
-        )
-
-        high_priority = sum(
-            1
-            for t in tickets
-            if str(t.priority).lower() == "high"
-        )
-
-        teams = {}
-
-        for ticket in tickets:
-            team = ticket.assigned_team or "unassigned"
-            teams[team] = teams.get(team, 0) + 1
-
-        dependency_count = sum(
-            len(t.dependencies or [])
-            for t in tickets
-        )
-
-        summary_lines = [
-            "Feature Analysis Summary",
-            "",
-            f"Generated Tickets: {total_tickets}",
-            f"Total Story Points: {total_points}",
-            f"High Priority Tickets: {high_priority}",
-            f"Dependencies: {dependency_count}",
-            f"Active Blockers: {len(blockers)}",
-            "",
-            "Team Distribution:"
-        ]
-
-        for team, count in teams.items():
-            summary_lines.append(
-                f"- {team}: {count} ticket(s)"
-            )
-
-        summary_lines.extend([
-            "",
-            "Immediate Priorities:"
-        ])
-
-        priority_tickets = sorted(
-            tickets,
-            key=lambda t: (
-                0
-                if str(t.priority).lower() == "high"
-                else 1
-            )
-        )
-
-        for ticket in priority_tickets[:5]:
-            summary_lines.append(
-                f"- {ticket.ticket_id}: {ticket.title}"
-            )
-
-        if blockers:
-            summary_lines.extend([
-                "",
-                "Active Blockers:"
-            ])
-
-            for blocker in blockers:
-                summary_lines.append(
-                    f"- {blocker.issue_id}: "
-                    f"{blocker.description}"
-                )
-
-        else:
-            summary_lines.extend([
-                "",
-                "Active Blockers:",
-                "- None detected"
-            ])
-
-        return "\n".join(summary_lines)
