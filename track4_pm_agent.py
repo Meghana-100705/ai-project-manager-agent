@@ -651,16 +651,116 @@ class RuleBasedTeamAssigner(TeamAssigner):
         "testing": ["test", "testing", "qa", "unit", "integration"],
     }
 
-    def assign_team(self, ticket: GeneratedTicket, teams: Dict[str, List[str]] = None) -> str:
-        skill_map = teams or self.TEAM_SKILLS
-        text = f"{ticket.title} {ticket.description} {' '.join(ticket.labels)}".lower()
-        scores: Dict[str, int] = {}
-        for team, keywords in skill_map.items():
-            scores[team] = sum(1 for kw in keywords if kw.lower() in text)
-        if max(scores.values()) == 0:
-            return "backend"  # default
-        return max(scores, key=scores.get)
+    # def assign_team(self, ticket: GeneratedTicket, teams: Dict[str, List[str]] = None) -> str:
+    #     skill_map = teams or self.TEAM_SKILLS
+    #     text = f"{ticket.title} {ticket.description} {' '.join(ticket.labels)}".lower()
+    #     scores: Dict[str, int] = {}
+    #     for team, keywords in skill_map.items():
+    #         scores[team] = sum(1 for kw in keywords if kw.lower() in text)
+    #     if max(scores.values()) == 0:
+    #         return "backend"  # default
+    #     return max(scores, key=scores.get)
 
+
+    def assign_team(self, ticket: GeneratedTicket) -> str:
+        """
+        Assign the ticket to the most appropriate team.
+        """
+
+        text = " ".join([
+            ticket.title or "",
+            ticket.description or "",
+            " ".join(ticket.labels or [])
+        ]).lower()
+
+        # ---------------------------------------------
+        # Testing / QA
+        # ---------------------------------------------
+        testing_keywords = [
+            "test",
+            "testing",
+            "qa",
+            "quality assurance",
+            "unit test",
+            "integration test"
+        ]
+
+        if any(keyword in text for keyword in testing_keywords):
+            return "testing"
+
+        # ---------------------------------------------
+        # ML / AI
+        # ---------------------------------------------
+        ml_keywords = [
+            "machine learning",
+            "ml model",
+            "model training",
+            "train model",
+            "prediction",
+            "predictive",
+            "recommendation",
+            "classification",
+            "clustering",
+            "deep learning",
+            "neural network",
+            "ai model"
+        ]
+
+        if any(keyword in text for keyword in ml_keywords):
+            return "ml_team"
+
+        # ---------------------------------------------
+        # Frontend / UI
+        # ---------------------------------------------
+        frontend_keywords = [
+            "frontend",
+            "front-end",
+            "ui",
+            "ux",
+            "user interface",
+            "dashboard",
+            "screen",
+            "page",
+            "component",
+            "client-side",
+            "accessibility",
+            "responsive",
+            "layout"
+        ]
+
+        if any(keyword in text for keyword in frontend_keywords):
+            return "frontend"
+
+        # ---------------------------------------------
+        # Backend
+        # ---------------------------------------------
+        backend_keywords = [
+            "backend",
+            "back-end",
+            "api",
+            "database",
+            "schema",
+            "sql",
+            "server",
+            "authentication",
+            "authorization",
+            "jwt",
+            "password",
+            "payment",
+            "webhook",
+            "integration",
+            "middleware",
+            "service",
+            "endpoint"
+        ]
+
+        if any(keyword in text for keyword in backend_keywords):
+            return "backend"
+
+        # ---------------------------------------------
+        # Default
+        # ---------------------------------------------
+        return "backend"
 
 # class AnalyticsBlockerDetector(BlockerDetector):
 #     """Detect blockers by analyzing issue states and dependencies."""
@@ -1646,3 +1746,95 @@ class PMAgent:
                 )
             }
         }
+
+
+    def generate_feature_summary(
+        self,
+        tickets: List[GeneratedTicket],
+        blockers: List[BlockerAlert]
+    ) -> str:
+        """
+        Generate a concise executive summary specifically
+        for the feature being analyzed.
+        """
+
+        total_tickets = len(tickets)
+
+        total_points = sum(
+            t.estimated_story_points or 0
+            for t in tickets
+        )
+
+        high_priority = sum(
+            1
+            for t in tickets
+            if str(t.priority).lower() == "high"
+        )
+
+        teams = {}
+
+        for ticket in tickets:
+            team = ticket.assigned_team or "unassigned"
+            teams[team] = teams.get(team, 0) + 1
+
+        dependency_count = sum(
+            len(t.dependencies or [])
+            for t in tickets
+        )
+
+        summary_lines = [
+            "Feature Analysis Summary",
+            "",
+            f"Generated Tickets: {total_tickets}",
+            f"Total Story Points: {total_points}",
+            f"High Priority Tickets: {high_priority}",
+            f"Dependencies: {dependency_count}",
+            f"Active Blockers: {len(blockers)}",
+            "",
+            "Team Distribution:"
+        ]
+
+        for team, count in teams.items():
+            summary_lines.append(
+                f"- {team}: {count} ticket(s)"
+            )
+
+        summary_lines.extend([
+            "",
+            "Immediate Priorities:"
+        ])
+
+        priority_tickets = sorted(
+            tickets,
+            key=lambda t: (
+                0
+                if str(t.priority).lower() == "high"
+                else 1
+            )
+        )
+
+        for ticket in priority_tickets[:5]:
+            summary_lines.append(
+                f"- {ticket.ticket_id}: {ticket.title}"
+            )
+
+        if blockers:
+            summary_lines.extend([
+                "",
+                "Active Blockers:"
+            ])
+
+            for blocker in blockers:
+                summary_lines.append(
+                    f"- {blocker.issue_id}: "
+                    f"{blocker.description}"
+                )
+
+        else:
+            summary_lines.extend([
+                "",
+                "Active Blockers:",
+                "- None detected"
+            ])
+
+        return "\n".join(summary_lines)

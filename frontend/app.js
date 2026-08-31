@@ -1,9 +1,6 @@
-const API_BASE = "https://ai-project-manager-agent.onrender.com";
+const API_BASE =
+  "https://ai-project-manager-agent.onrender.com";
 
-
-/* =========================
-   ELEMENTS
-========================= */
 
 const healthStatus =
   document.getElementById("healthStatus");
@@ -17,14 +14,59 @@ const downloadBtn =
 const copyBtn =
   document.getElementById("copyBtn");
 
-const outputEl =
-  document.getElementById("output");
-
 const errorBox =
   document.getElementById("errorBox");
 
 const metaEl =
   document.getElementById("meta");
+
+const emptyState =
+  document.getElementById("emptyState");
+
+const summarySection =
+  document.getElementById("summarySection");
+
+const ticketsSection =
+  document.getElementById("ticketsSection");
+
+const blockersSection =
+  document.getElementById("blockersSection");
+
+const dependenciesSection =
+  document.getElementById("dependenciesSection");
+
+const ticketsEl =
+  document.getElementById("tickets");
+
+const blockersEl =
+  document.getElementById("blockers");
+
+const dependenciesEl =
+  document.getElementById("dependencies");
+
+const dailySummaryEl =
+  document.getElementById("dailySummary");
+
+const ticketCount =
+  document.getElementById("ticketCount");
+
+const blockerCount =
+  document.getElementById("blockerCount");
+
+const dependencyCount =
+  document.getElementById("dependencyCount");
+
+const storyPoints =
+  document.getElementById("storyPoints");
+
+const ticketSectionCount =
+  document.getElementById("ticketSectionCount");
+
+const blockerSectionCount =
+  document.getElementById("blockerSectionCount");
+
+const dependencySectionCount =
+  document.getElementById("dependencySectionCount");
 
 
 let lastJson = null;
@@ -39,7 +81,6 @@ function showError(message) {
   errorBox.style.display = "block";
 
   errorBox.textContent = message;
-
 }
 
 
@@ -48,12 +89,11 @@ function clearError() {
   errorBox.style.display = "none";
 
   errorBox.textContent = "";
-
 }
 
 
 /* =========================
-   BACKEND HEALTH
+   HEALTH CHECK
 ========================= */
 
 async function checkHealth() {
@@ -65,8 +105,9 @@ async function checkHealth() {
 
     if (!response.ok) {
 
-      throw new Error();
-
+      throw new Error(
+        `HTTP ${response.status}`
+      );
     }
 
     const data =
@@ -81,36 +122,39 @@ async function checkHealth() {
 
       healthStatus.textContent =
         "Backend: unknown";
-
     }
 
-  } catch {
+  } catch (error) {
 
     healthStatus.textContent =
       "Backend: offline ❌";
-
   }
-
 }
 
 
 /* =========================
-   DOWNLOAD JSON
+   DOWNLOAD
 ========================= */
 
 function downloadJsonFile(
   object,
-  filename = "pm_agent_output.json"
+  filename = "pm_agent_results.json"
 ) {
 
-  const blob = new Blob(
-    [
-      JSON.stringify(object, null, 2)
-    ],
-    {
-      type: "application/json"
-    }
-  );
+  const blob =
+    new Blob(
+      [
+        JSON.stringify(
+          object,
+          null,
+          2
+        )
+      ],
+      {
+        type:
+          "application/json"
+      }
+    );
 
   const url =
     URL.createObjectURL(blob);
@@ -120,775 +164,443 @@ function downloadJsonFile(
 
   anchor.href = url;
 
-  anchor.download = filename;
+  anchor.download =
+    filename;
 
-  document.body.appendChild(anchor);
+  document.body.appendChild(
+    anchor
+  );
 
   anchor.click();
 
   anchor.remove();
 
   URL.revokeObjectURL(url);
-
 }
 
 
 /* =========================
-   ESCAPE HTML
+   HELPERS
 ========================= */
 
-function escapeHtml(value) {
+function escapeHTML(value) {
 
   if (value === null ||
       value === undefined) {
 
     return "";
-
   }
 
   return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
 
-    .replaceAll("&", "&amp;")
 
-    .replaceAll("<", "&lt;")
+function resetResults() {
 
-    .replaceAll(">", "&gt;")
+  emptyState.classList.remove(
+    "hidden"
+  );
 
-    .replaceAll('"', "&quot;")
+  summarySection.classList.add(
+    "hidden"
+  );
 
-    .replaceAll("'", "&#039;");
+  ticketsSection.classList.add(
+    "hidden"
+  );
 
+  blockersSection.classList.add(
+    "hidden"
+  );
+
+  dependenciesSection.classList.add(
+    "hidden"
+  );
+
+  ticketsEl.innerHTML = "";
+
+  blockersEl.innerHTML = "";
+
+  dependenciesEl.innerHTML = "";
+
+  dailySummaryEl.textContent = "";
+
+  ticketCount.textContent = "0";
+
+  blockerCount.textContent = "0";
+
+  dependencyCount.textContent = "0";
+
+  storyPoints.textContent = "0";
 }
 
 
 /* =========================
-   PRIORITY BADGE
-========================= */
-
-function priorityBadge(priority) {
-
-  const value =
-    String(priority || "unknown")
-      .toLowerCase();
-
-  let className = "badge-medium";
-
-  if (value === "high") {
-
-    className = "badge-high";
-
-  }
-
-  if (value === "low") {
-
-    className = "badge-low";
-
-  }
-
-  return `
-    <span class="badge ${className}">
-      ${escapeHtml(value.toUpperCase())}
-    </span>
-  `;
-
-}
-
-
-/* =========================
-   RENDER OVERVIEW
-========================= */
-
-function renderOverview(results) {
-
-  const tickets =
-    Array.isArray(results.generated_tickets)
-      ? results.generated_tickets
-      : [];
-
-
-  const totalTickets =
-    tickets.length;
-
-
-  const totalPoints =
-    tickets.reduce(
-      (sum, ticket) =>
-        sum +
-        Number(
-          ticket.estimated_story_points || 0
-        ),
-      0
-    );
-
-
-  const highPriority =
-    tickets.filter(
-      ticket =>
-        String(ticket.priority)
-          .toLowerCase() === "high"
-    ).length;
-
-
-  const teams =
-    new Set(
-      tickets
-        .map(ticket => ticket.assigned_team)
-        .filter(Boolean)
-    );
-
-
-  document.getElementById(
-    "totalTickets"
-  ).textContent = totalTickets;
-
-
-  document.getElementById(
-    "totalPoints"
-  ).textContent = totalPoints;
-
-
-  document.getElementById(
-    "highPriority"
-  ).textContent = highPriority;
-
-
-  document.getElementById(
-    "teamCount"
-  ).textContent = teams.size;
-
-
-  document.getElementById(
-    "ticketCountLabel"
-  ).textContent =
-    `${totalTickets} ticket${totalTickets === 1 ? "" : "s"}`;
-
-}
-
-
-/* =========================
-   TEAM ASSIGNMENT
-========================= */
-
-function renderTeams(tickets) {
-
-  const container =
-    document.getElementById(
-      "teamAssignment"
-    );
-
-
-  const counts = {};
-
-
-  tickets.forEach(ticket => {
-
-    const team =
-      ticket.assigned_team ||
-      "Unassigned";
-
-    counts[team] =
-      (counts[team] || 0) + 1;
-
-  });
-
-
-  const teams =
-    Object.entries(counts);
-
-
-  if (!teams.length) {
-
-    container.innerHTML =
-      `<div class="empty">
-        No team assignments available.
-      </div>`;
-
-    return;
-
-  }
-
-
-  container.innerHTML =
-    teams.map(
-      ([team, count]) => `
-
-        <div class="team-item">
-
-          <div class="team-name">
-            ${escapeHtml(team)}
-          </div>
-
-          <div class="team-count">
-            ${count}
-            ticket${count === 1 ? "" : "s"}
-          </div>
-
-        </div>
-
-      `
-    ).join("");
-
-}
-
-
-/* =========================
-   GENERATED TICKETS
+   RENDER TICKETS
 ========================= */
 
 function renderTickets(tickets) {
 
-  const tbody =
-    document.getElementById(
-      "ticketsTable"
-    );
+  ticketsEl.innerHTML = "";
 
+  if (!Array.isArray(tickets) ||
+      tickets.length === 0) {
 
-  if (!tickets.length) {
-
-    tbody.innerHTML = `
-      <tr>
-        <td colspan="7" class="empty">
-          No tickets generated.
-        </td>
-      </tr>
-    `;
+    ticketsEl.innerHTML =
+      `<div class="small">
+        No tickets generated.
+      </div>`;
 
     return;
-
   }
 
 
-  tbody.innerHTML =
-    tickets.map(
-      (ticket, index) => {
+  tickets.forEach(ticket => {
 
-        const dependencies =
-          Array.isArray(ticket.dependencies)
-            ? ticket.dependencies
-            : [];
+    const priority =
+      String(
+        ticket.priority || ""
+      ).toLowerCase();
 
-
-        return `
-
-          <tr
-            onclick="showTicketDetails(${index})"
-          >
-
-            <td>
-              <span class="ticket-id">
-                ${escapeHtml(ticket.ticket_id)}
-              </span>
-            </td>
+    const acceptance =
+      Array.isArray(
+        ticket.acceptance_criteria
+      )
+        ? ticket.acceptance_criteria
+        : [];
 
 
-            <td>
-              ${escapeHtml(ticket.title)}
-            </td>
+    const dependencies =
+      Array.isArray(
+        ticket.dependencies
+      )
+        ? ticket.dependencies
+        : [];
 
 
-            <td>
-              ${escapeHtml(ticket.issue_type || "-")}
-            </td>
+    const labels =
+      Array.isArray(
+        ticket.labels
+      )
+        ? ticket.labels
+        : [];
 
 
-            <td>
-              <strong>
-                ${escapeHtml(
-                  ticket.estimated_story_points ?? "-"
-                )}
-              </strong>
-            </td>
+    const card =
+      document.createElement("div");
+
+    card.className =
+      "ticket";
 
 
-            <td>
-              ${escapeHtml(
-                ticket.assigned_team || "Unassigned"
-              )}
-            </td>
+    card.innerHTML = `
 
+      <div class="ticket-header">
 
-            <td>
-              ${priorityBadge(ticket.priority)}
-            </td>
+        <div>
 
+          <div class="ticket-id">
+            ${escapeHTML(
+              ticket.ticket_id
+            )}
+          </div>
 
-            <td>
-              ${
-                dependencies.length
-                  ? dependencies.map(
-                      dep =>
-                        `<span class="ticket-id">
-                          ${escapeHtml(dep)}
-                        </span>`
-                    ).join(", ")
-                  : "None"
-              }
-            </td>
+          <div class="ticket-title">
+            ${escapeHTML(
+              ticket.title
+            )}
+          </div>
 
-          </tr>
+        </div>
 
-        `;
-
-      }
-    ).join("");
-
-}
-
-
-/* =========================
-   TICKET DETAILS
-========================= */
-
-let currentTickets = [];
-
-
-function showTicketDetails(index) {
-
-  const ticket =
-    currentTickets[index];
-
-
-  if (!ticket) return;
-
-
-  const criteria =
-    Array.isArray(ticket.acceptance_criteria)
-      ? ticket.acceptance_criteria
-      : [];
-
-
-  const labels =
-    Array.isArray(ticket.labels)
-      ? ticket.labels
-      : [];
-
-
-  const dependencies =
-    Array.isArray(ticket.dependencies)
-      ? ticket.dependencies
-      : [];
-
-
-  document.getElementById(
-    "ticketDetails"
-  ).innerHTML = `
-
-    <div class="ticket-detail">
-
-      <div class="detail-title">
-
-        ${escapeHtml(ticket.ticket_id)}
-        —
-        ${escapeHtml(ticket.title)}
-
-      </div>
-
-
-      <div class="detail-description">
-
-        ${escapeHtml(ticket.description || "")}
-
-      </div>
-
-
-      <div style="margin-top:12px">
-
-        ${priorityBadge(ticket.priority)}
-
-        &nbsp;
-
-        <span class="badge badge-low">
-          ${escapeHtml(
-            ticket.assigned_team || "Unassigned"
+        <span class="badge">
+          ${escapeHTML(
+            ticket.issue_type || "task"
           )}
         </span>
 
-        &nbsp;
+      </div>
 
-        <span class="badge badge-medium">
-          ${escapeHtml(
-            ticket.estimated_story_points ?? "-"
-          )} points
+
+      <div class="ticket-description">
+        ${escapeHTML(
+          ticket.description
+        )}
+      </div>
+
+
+      <div class="ticket-meta">
+
+        <span class="tag">
+          📊 ${
+            escapeHTML(
+              ticket.estimated_story_points ??
+              0
+            )
+          } points
         </span>
+
+        <span class="tag priority-${escapeHTML(priority)}">
+          ⚡ ${
+            escapeHTML(
+              ticket.priority || "normal"
+            )
+          }
+        </span>
+
+        <span class="tag">
+          👥 ${
+            escapeHTML(
+              ticket.assigned_team ||
+              "unassigned"
+            )
+          }
+        </span>
+
+        ${
+          labels.map(label => `
+            <span class="tag">
+              #${escapeHTML(label)}
+            </span>
+          `).join("")
+        }
 
       </div>
 
 
       ${
-        labels.length
+        acceptance.length > 0
           ? `
-            <div style="margin-top:12px">
-              <div class="criteria-title">
-                Labels
+            <div class="acceptance">
+
+              <div class="acceptance-title">
+                Acceptance Criteria
               </div>
 
-              ${labels.map(
-                label =>
-                  `<span class="badge badge-low">
-                    ${escapeHtml(label)}
-                  </span>`
-              ).join(" ")}
+              <ul>
+
+                ${
+                  acceptance.map(item => `
+                    <li>
+                      ${escapeHTML(item)}
+                    </li>
+                  `).join("")
+                }
+
+              </ul>
+
             </div>
           `
           : ""
       }
 
 
-      <div class="criteria">
+      ${
+        dependencies.length > 0
+          ? `
+            <div class="acceptance">
 
-        <div class="criteria-title">
-          Acceptance Criteria
-        </div>
+              <div class="acceptance-title">
+                Dependencies
+              </div>
 
-        ${
-          criteria.length
-            ? criteria.map(
-                item =>
-                  `<div>
-                    ${escapeHtml(item)}
-                  </div>`
-              ).join("")
-            : `<div>
-                No acceptance criteria available.
-              </div>`
-        }
+              <div class="small">
+                ${dependencies.map(dep =>
+                  escapeHTML(dep)
+                ).join(", ")}
+              </div>
 
-      </div>
+            </div>
+          `
+          : ""
+      }
 
+    `;
 
-      <div class="criteria">
-
-        <div class="criteria-title">
-          Dependencies
-        </div>
-
-        ${
-          dependencies.length
-            ? dependencies.map(
-                dep =>
-                  `<div>
-                    ${escapeHtml(dep)}
-                  </div>`
-              ).join("")
-            : `<div>
-                No dependencies.
-              </div>`
-        }
-
-      </div>
-
-    </div>
-
-  `;
-
-}
-
-
-/* =========================
-   DEPENDENCIES
-========================= */
-
-function renderDependencies(tickets) {
-
-  const container =
-    document.getElementById(
-      "dependencies"
+    ticketsEl.appendChild(
+      card
     );
-
-
-  const dependencies = [];
-
-
-  tickets.forEach(ticket => {
-
-    if (
-      Array.isArray(ticket.dependencies)
-    ) {
-
-      ticket.dependencies.forEach(dep => {
-
-        dependencies.push({
-
-          ticket:
-            ticket.ticket_id,
-
-          dependsOn:
-            dep
-
-        });
-
-      });
-
-    }
 
   });
+}
 
 
-  if (!dependencies.length) {
+/* =========================
+   RENDER BLOCKERS
+========================= */
 
-    container.innerHTML = `
-      <div class="empty">
+function renderBlockers(blockers) {
+
+  blockersEl.innerHTML = "";
+
+  if (!Array.isArray(blockers) ||
+      blockers.length === 0) {
+
+    blockersEl.innerHTML =
+      `<div class="small">
+        No blockers detected 🎉
+      </div>`;
+
+    return;
+  }
+
+
+  blockers.forEach(blocker => {
+
+    const card =
+      document.createElement("div");
+
+    card.className =
+      "blocker";
+
+
+    card.innerHTML = `
+
+      <div class="blocker-title">
+
+        ⚠️ ${
+          escapeHTML(
+            blocker.issue_id ||
+            blocker.ticket_id ||
+            "Issue"
+          )
+        }
+
+      </div>
+
+      <div class="blocker-description">
+
+        ${
+          escapeHTML(
+            blocker.description ||
+            blocker.issue_title ||
+            blocker.blocker_type ||
+            "Blocker detected"
+          )
+        }
+
+      </div>
+
+      ${
+        blocker.recommended_action
+          ? `
+            <div class="action">
+              <strong>Recommended action:</strong>
+              ${escapeHTML(
+                blocker.recommended_action
+              )}
+            </div>
+          `
+          : ""
+      }
+
+    `;
+
+    blockersEl.appendChild(
+      card
+    );
+
+  });
+}
+
+
+/* =========================
+   RENDER DEPENDENCIES
+========================= */
+
+function renderDependencies(
+  dependencies
+) {
+
+  dependenciesEl.innerHTML = "";
+
+  if (!Array.isArray(dependencies) ||
+      dependencies.length === 0) {
+
+    dependenciesEl.innerHTML =
+      `<div class="small">
         No dependencies detected.
-      </div>
-    `;
+      </div>`;
 
     return;
-
   }
 
 
-  container.innerHTML =
-    dependencies.map(
-      dependency => `
+  dependencies.forEach(dep => {
 
-        <div class="dependency">
+    const card =
+      document.createElement("div");
 
-          <span class="ticket-id">
-            ${escapeHtml(
-              dependency.ticket
-            )}
-          </span>
-
-          <span class="dep-arrow">
-            depends on →
-          </span>
-
-          <span class="ticket-id">
-            ${escapeHtml(
-              dependency.dependsOn
-            )}
-          </span>
-
-        </div>
-
-      `
-    ).join("");
-
-}
+    card.className =
+      "dependency";
 
 
-/* =========================
-   BLOCKERS
-========================= */
+    card.innerHTML = `
 
-function renderBlockers(results) {
+      <strong>
+        ${escapeHTML(
+          dep.issue_id ||
+          dep.ticket_id ||
+          "Issue"
+        )}
+      </strong>
 
-  const container =
-    document.getElementById(
-      "blockers"
+      ${
+        dep.issue_title
+          ? `
+            <span>
+              — ${escapeHTML(
+                dep.issue_title
+              )}
+            </span>
+          `
+          : ""
+      }
+
+      <span class="arrow">
+        depends on
+      </span>
+
+      <strong>
+        ${escapeHTML(
+          dep.depends_on_id ||
+          dep.depends_on ||
+          "another issue"
+        )}
+      </strong>
+
+      ${
+        dep.depends_on_title
+          ? `
+            <span>
+              — ${escapeHTML(
+                dep.depends_on_title
+              )}
+            </span>
+          `
+          : ""
+      }
+
+    `;
+
+    dependenciesEl.appendChild(
+      card
     );
 
-
-  const blockers =
-    Array.isArray(
-      results.blockers_detected
-    )
-      ? results.blockers_detected
-      : [];
-
-
-  if (!blockers.length) {
-
-    container.innerHTML = `
-      <div class="empty">
-        No blockers detected.
-      </div>
-    `;
-
-    return;
-
-  }
-
-
-  /*
-    Limit only what is displayed.
-    Complete data remains available
-    through Download JSON.
-  */
-
-  const visible =
-    blockers.slice(0, 10);
-
-
-  container.innerHTML =
-    visible.map(
-      blocker => `
-
-        <div class="blocker">
-
-          <div class="blocker-title">
-
-            ${escapeHtml(
-              blocker.issue_id ||
-              blocker.ticket_id ||
-              "Issue"
-            )}
-
-            ${
-              blocker.severity
-                ? ` — ${escapeHtml(
-                    blocker.severity
-                  )}`
-                : ""
-            }
-
-          </div>
-
-
-          <div class="blocker-description">
-
-            ${escapeHtml(
-              blocker.description ||
-              blocker.blocker_type ||
-              "Blocker detected"
-            )}
-
-          </div>
-
-
-          ${
-            blocker.recommended_action
-              ? `
-                <div
-                  class="blocker-description"
-                  style="margin-top:8px"
-                >
-                  <strong>
-                    Recommended:
-                  </strong>
-
-                  ${escapeHtml(
-                    blocker.recommended_action
-                  )}
-                </div>
-              `
-              : ""
-          }
-
-        </div>
-
-      `
-    ).join("");
-
-
-  if (blockers.length > 10) {
-
-    container.innerHTML += `
-
-      <div class="small">
-
-        Showing 10 of
-        ${blockers.length}
-        blockers.
-        Download JSON for complete data.
-
-      </div>
-
-    `;
-
-  }
-
+  });
 }
 
 
 /* =========================
-   DAILY SUMMARY
+   RENDER COMPLETE RESULT
 ========================= */
 
-function renderSummary(results) {
-
-  const container =
-    document.getElementById(
-      "dailySummary"
-    );
-
-
-  const summary =
-    results.daily_summary;
-
-
-  if (!summary) {
-
-    container.innerHTML = `
-      <div class="empty">
-        Daily summary not available.
-      </div>
-    `;
-
-    return;
-
-  }
-
-
-  if (typeof summary === "string") {
-
-    container.innerHTML = `
-      <div class="summary">
-        ${escapeHtml(summary)}
-      </div>
-    `;
-
-    return;
-
-  }
-
-
-  /*
-    If backend returns an object,
-    display its important sections.
-  */
-
-  const sections = [];
-
-
-  Object.entries(summary).forEach(
-    ([key, value]) => {
-
-      sections.push(`
-
-        <div style="margin-bottom:15px">
-
-          <div class="criteria-title">
-            ${escapeHtml(
-              key.replaceAll("_", " ")
-            )}
-          </div>
-
-          <div class="summary">
-
-            ${
-              typeof value === "object"
-                ? escapeHtml(
-                    JSON.stringify(
-                      value,
-                      null,
-                      2
-                    )
-                  )
-                : escapeHtml(value)
-            }
-
-          </div>
-
-        </div>
-
-      `);
-
-    }
-  );
-
-
-  container.innerHTML =
-    sections.join("");
-
-}
-
-
-/* =========================
-   COMPLETE DASHBOARD
-========================= */
-
-function renderDashboard(data) {
+function renderResults(data) {
 
   const results =
     data?.results || {};
@@ -902,67 +614,123 @@ function renderDashboard(data) {
       : [];
 
 
-  currentTickets = tickets;
+  const blockers =
+    Array.isArray(
+      results.blockers_detected
+    )
+      ? results.blockers_detected
+      : [];
 
 
-  /* Project information */
-
-  document.getElementById(
-    "projectTrack"
-  ).textContent =
-    `${data.team_id || "Project"} · ${
-      data.track || "PM Agent"
-    }`;
+  const dependencies =
+    Array.isArray(
+      results.dependencies
+    )
+      ? results.dependencies
+      : [];
 
 
-  /* Overview */
+  const totalPoints =
+    tickets.reduce(
+      (total, ticket) => {
 
-  renderOverview(results);
+        const points =
+          Number(
+            ticket.estimated_story_points
+          );
 
+        return total +
+          (Number.isFinite(points)
+            ? points
+            : 0);
 
-  /* Teams */
-
-  renderTeams(tickets);
-
-
-  /* Tickets */
-
-  renderTickets(tickets);
-
-
-  /* Dependencies */
-
-  renderDependencies(tickets);
-
-
-  /* Blockers */
-
-  renderBlockers(results);
+      },
+      0
+    );
 
 
-  /* Summary */
+  /* COUNTERS */
 
-  renderSummary(results);
+  ticketCount.textContent =
+    tickets.length;
+
+  blockerCount.textContent =
+    blockers.length;
+
+  dependencyCount.textContent =
+    dependencies.length;
+
+  storyPoints.textContent =
+    totalPoints;
 
 
-  /* First ticket automatically shown */
+  ticketSectionCount.textContent =
+    `${tickets.length} tickets`;
 
-  if (tickets.length) {
+  blockerSectionCount.textContent =
+    `${blockers.length} blockers`;
 
-    showTicketDetails(0);
+  dependencySectionCount.textContent =
+    `${dependencies.length} dependencies`;
+
+
+  /* EMPTY STATE */
+
+  emptyState.classList.add(
+    "hidden"
+  );
+
+
+  /* SUMMARY */
+
+  const summary =
+    results.daily_summary;
+
+
+  if (summary) {
+
+    dailySummaryEl.textContent =
+      summary;
+
+    summarySection.classList.remove(
+      "hidden"
+    );
 
   } else {
 
-    document.getElementById(
-      "ticketDetails"
-    ).innerHTML = `
-      <div class="empty">
-        No generated tickets.
-      </div>
-    `;
-
+    summarySection.classList.add(
+      "hidden"
+    );
   }
 
+
+  /* TICKETS */
+
+  renderTickets(tickets);
+
+  ticketsSection.classList.remove(
+    "hidden"
+  );
+
+
+  /* BLOCKERS */
+
+  renderBlockers(blockers);
+
+  blockersSection.classList.remove(
+    "hidden"
+  );
+
+
+  /* DEPENDENCIES */
+
+  renderDependencies(
+    dependencies
+  );
+
+  dependenciesSection.classList.remove(
+    "hidden"
+  );
 }
 
 
@@ -976,16 +744,18 @@ runBtn.addEventListener(
 
     clearError();
 
-
-    metaEl.textContent =
-      "Running project manager agent...";
-
+    resetResults();
 
     runBtn.disabled = true;
 
     downloadBtn.disabled = true;
 
     copyBtn.disabled = true;
+
+    metaEl.textContent =
+      "Analyzing feature...";
+
+    lastJson = null;
 
 
     const featureDescription =
@@ -1019,7 +789,6 @@ runBtn.addEventListener(
       runBtn.disabled = false;
 
       return;
-
     }
 
 
@@ -1053,12 +822,16 @@ runBtn.addEventListener(
 
             headers: {
               "Content-Type":
+                "application/json",
+
+              "Accept":
                 "application/json"
             },
 
             body:
-              JSON.stringify(payload)
-
+              JSON.stringify(
+                payload
+              )
           }
         );
 
@@ -1078,7 +851,7 @@ runBtn.addEventListener(
       } catch {
 
         data = {
-          raw: text
+          error: text
         };
 
       }
@@ -1088,64 +861,73 @@ runBtn.addEventListener(
 
         showError(
           data?.error ||
-          `Backend error HTTP ${response.status}`
+          data?.detail ||
+          `Backend error: HTTP ${response.status}`
         );
 
-        outputEl.textContent =
-          JSON.stringify(
-            data,
-            null,
-            2
-          );
+        metaEl.textContent = "";
+
+        runBtn.disabled = false;
 
         return;
+      }
 
+
+      /*
+
+        Your backend currently
+        returns errors inside a
+        200 response.
+
+        Handle that as well.
+
+      */
+
+      if (data?.error) {
+
+        showError(
+          data.error
+        );
+
+        metaEl.textContent = "";
+
+        runBtn.disabled = false;
+
+        return;
       }
 
 
       lastJson = data;
 
 
-      /* Save complete JSON */
-
-      outputEl.textContent =
-        JSON.stringify(
-          data,
-          null,
-          2
-        );
-
-
-      /* Render dashboard */
-
-      renderDashboard(data);
-
-
-      const ms =
+      const elapsed =
         Math.round(
-          performance.now() - start
+          performance.now() -
+          start
         );
+
+
+      renderResults(data);
 
 
       metaEl.textContent =
-        `Analysis completed in ${ms} ms`;
+        `Analysis completed in ${elapsed} ms`;
 
 
       downloadBtn.disabled = false;
 
       copyBtn.disabled = false;
 
-    }
 
-    catch (error) {
+    } catch (error) {
 
       showError(
         `Could not reach backend at ${API_BASE}. Is it running?`
       );
 
-    }
+      metaEl.textContent = "";
 
-    finally {
+    } finally {
 
       runBtn.disabled = false;
 
@@ -1166,8 +948,7 @@ downloadBtn.addEventListener(
     if (!lastJson) return;
 
     downloadJsonFile(
-      lastJson,
-      "pm_agent_output.json"
+      lastJson
     );
 
   }
@@ -1196,6 +977,10 @@ copyBtn.addEventListener(
       );
 
 
+      const original =
+        copyBtn.textContent;
+
+
       copyBtn.textContent =
         "Copied ✅";
 
@@ -1204,18 +989,17 @@ copyBtn.addEventListener(
         () => {
 
           copyBtn.textContent =
-            "Copy JSON";
+            original;
 
         },
         1000
       );
 
-    }
 
-    catch {
+    } catch {
 
       showError(
-        "Copy failed. Browser blocked clipboard access."
+        "Copy failed. Your browser blocked clipboard access."
       );
 
     }
@@ -1225,13 +1009,14 @@ copyBtn.addEventListener(
 
 
 /* =========================
-   INITIALIZATION
+   INITIALIZE
 ========================= */
+
+resetResults();
 
 checkHealth();
 
-
 setInterval(
   checkHealth,
-  5000
+  10000
 );

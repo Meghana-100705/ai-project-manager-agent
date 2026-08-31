@@ -1,386 +1,217 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>AI Project Manager Agent</title>
-
-  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="style.css">
 </head>
 
 <body>
 
-  <!-- TOP BAR -->
-  <header class="topbar">
-    <div class="brand">
-      <div class="logo">PM</div>
+<header class="topbar">
+  <div class="brand">
+    <div class="logo">🤖</div>
+    <div>
+      <div class="title">AI Project Manager Agent</div>
+      <div class="subtitle">Intelligent backlog analysis & project planning</div>
+    </div>
+  </div>
+
+  <div id="healthStatus" class="status">
+    Checking backend...
+  </div>
+</header>
+
+<main class="container">
+
+  <!-- INPUT -->
+  <section class="card input-card">
+    <h2>Analyze a Feature</h2>
+    <p class="small">
+      Describe a feature and let the AI Project Manager break it into actionable work.
+    </p>
+
+    <label class="label">Feature Description</label>
+
+    <textarea
+      id="feature"
+      class="textarea"
+      placeholder="Example: Build a secure user authentication system with registration, login, password hashing, JWT authentication and role-based access control"
+    ></textarea>
+
+    <div class="grid2">
 
       <div>
-        <div class="title">AI Project Manager Agent</div>
-        <div class="subtitle">
-          Intelligent Agile Task Management
-        </div>
+        <label class="label">Backlog Path</label>
+        <input
+          id="backlogPath"
+          class="input"
+          type="text"
+          placeholder="Leave empty to use default backlog"
+        >
       </div>
+
+      <div>
+        <label class="label">Backlog Type</label>
+
+        <select id="backlogType">
+          <option value="csv">CSV</option>
+          <option value="json">JSON</option>
+        </select>
+      </div>
+
     </div>
 
-    <div id="healthStatus" class="status">
-      Checking backend...
+    <div class="row">
+      <button id="runBtn" class="btn primary">
+        🚀 Analyze Feature
+      </button>
     </div>
-  </header>
+
+    <div id="errorBox" class="error"></div>
+  </section>
 
 
-  <main class="container">
+  <!-- RESULTS -->
+  <section class="card results-card">
 
-    <!-- LEFT PANEL -->
-    <section class="card input-card">
-
-      <h2>Run Project Analysis</h2>
-
-      <p class="small">
-        Enter a feature and optionally provide your backlog dataset.
-      </p>
-
-      <label class="label">
-        Feature Description
-      </label>
-
-      <textarea
-        id="feature"
-        class="textarea"
-        placeholder="Example: Build a user authentication system with login and token-based access"
-      ></textarea>
-
-
-      <label class="label">
-        Backlog Path
-      </label>
-
-      <input
-        id="backlogPath"
-        class="input"
-        type="text"
-        placeholder="Example: C:\Users\SAMA\Desktop\dataset.csv"
-      />
-
-
-      <label class="label">
-        Backlog Type
-      </label>
-
-      <select id="backlogType">
-        <option value="csv">CSV</option>
-        <option value="json">JSON</option>
-      </select>
-
+    <div class="cardHead">
+      <div>
+        <h2>Project Analysis</h2>
+        <div id="meta" class="small"></div>
+      </div>
 
       <div class="row">
-
-        <button
-          id="runBtn"
-          class="btn primary"
-        >
-          ▶ Run Agent
+        <button id="downloadBtn" class="btn" disabled>
+          ⬇ Download JSON
         </button>
 
-        <button
-          id="downloadBtn"
-          class="btn"
-          disabled
-        >
-          Download JSON
-        </button>
-
-        <button
-          id="copyBtn"
-          class="btn"
-          disabled
-        >
+        <button id="copyBtn" class="btn" disabled>
           Copy JSON
         </button>
-
       </div>
-
-      <div id="meta" class="hint"></div>
-
-      <div id="errorBox" class="error" style="display:none"></div>
-
-    </section>
+    </div>
 
 
-    <!-- RIGHT PANEL -->
-    <section class="dashboard">
+    <!-- SUMMARY CARDS -->
 
-      <!-- OVERVIEW -->
-      <div class="section-title">
+    <div id="summary" class="summary-grid">
+
+      <div class="summary-card">
+        <div class="summary-icon">🎫</div>
         <div>
-          <h2>Project Overview</h2>
-          <span id="projectTrack">
-            Waiting for analysis
-          </span>
+          <div class="summary-label">Tickets</div>
+          <div id="ticketCount" class="summary-value">0</div>
         </div>
       </div>
 
-
-      <div class="stats-grid">
-
-        <div class="stat-card">
-          <div class="stat-label">
-            Total Tickets
-          </div>
-
-          <div id="totalTickets" class="stat-value">
-            0
-          </div>
+      <div class="summary-card">
+        <div class="summary-icon">⚠️</div>
+        <div>
+          <div class="summary-label">Blockers</div>
+          <div id="blockerCount" class="summary-value">0</div>
         </div>
-
-
-        <div class="stat-card">
-          <div class="stat-label">
-            Story Points
-          </div>
-
-          <div id="totalPoints" class="stat-value">
-            0
-          </div>
-        </div>
-
-
-        <div class="stat-card">
-          <div class="stat-label">
-            High Priority
-          </div>
-
-          <div id="highPriority" class="stat-value">
-            0
-          </div>
-        </div>
-
-
-        <div class="stat-card">
-          <div class="stat-label">
-            Teams
-          </div>
-
-          <div id="teamCount" class="stat-value">
-            0
-          </div>
-        </div>
-
       </div>
 
-
-      <!-- TEAM ASSIGNMENT -->
-      <div class="card">
-
-        <div class="card-head">
-
-          <div>
-            <h2>Team Assignment</h2>
-
-            <div class="small">
-              Tickets assigned to each team
-            </div>
-          </div>
-
+      <div class="summary-card">
+        <div class="summary-icon">🔗</div>
+        <div>
+          <div class="summary-label">Dependencies</div>
+          <div id="dependencyCount" class="summary-value">0</div>
         </div>
-
-        <div id="teamAssignment" class="team-list">
-
-          <div class="empty">
-            Run the agent to view team assignments.
-          </div>
-
-        </div>
-
       </div>
 
-
-      <!-- GENERATED TICKETS -->
-      <div class="card">
-
-        <div class="card-head">
-
-          <div>
-            <h2>Generated Tickets</h2>
-
-            <div class="small">
-              Tasks generated by the project manager agent
-            </div>
-          </div>
-
-          <div id="ticketCountLabel" class="small">
-            0 tickets
-          </div>
-
+      <div class="summary-card">
+        <div class="summary-icon">📊</div>
+        <div>
+          <div class="summary-label">Story Points</div>
+          <div id="storyPoints" class="summary-value">0</div>
         </div>
-
-
-        <div class="table-container">
-
-          <table>
-
-            <thead>
-
-              <tr>
-                <th>ID</th>
-                <th>Task</th>
-                <th>Type</th>
-                <th>Story Points</th>
-                <th>Team</th>
-                <th>Priority</th>
-                <th>Dependencies</th>
-              </tr>
-
-            </thead>
-
-            <tbody id="ticketsTable">
-
-              <tr>
-                <td colspan="7" class="empty">
-                  Run the agent to generate tickets.
-                </td>
-              </tr>
-
-            </tbody>
-
-          </table>
-
-        </div>
-
       </div>
 
+    </div>
 
-      <!-- TICKET DETAILS -->
-      <div class="card">
 
-        <div class="card-head">
+    <!-- DAILY SUMMARY -->
 
-          <div>
-            <h2>Ticket Details</h2>
+    <div id="summarySection" class="result-section hidden">
 
-            <div class="small">
-              Acceptance criteria and task information
-            </div>
-          </div>
+      <h3>📋 AI Project Summary</h3>
 
-        </div>
+      <div id="dailySummary" class="summary-text"></div>
 
-        <div id="ticketDetails">
+    </div>
 
-          <div class="empty">
-            Select a ticket to view details.
-          </div>
 
-        </div>
+    <!-- TICKETS -->
 
+    <div id="ticketsSection" class="result-section hidden">
+
+      <div class="section-title">
+        <h3>🎫 Generated Tickets</h3>
+        <span id="ticketSectionCount" class="badge"></span>
       </div>
 
+      <div id="tickets"></div>
 
-      <!-- DEPENDENCIES -->
-      <div class="card">
+    </div>
 
-        <div class="card-head">
 
-          <div>
-            <h2>Dependencies</h2>
+    <!-- BLOCKERS -->
 
-            <div class="small">
-              Detected task dependencies
-            </div>
-          </div>
+    <div id="blockersSection" class="result-section hidden">
 
-        </div>
-
-        <div id="dependencies">
-
-          <div class="empty">
-            No dependencies displayed yet.
-          </div>
-
-        </div>
-
+      <div class="section-title">
+        <h3>⚠️ Blockers Detected</h3>
+        <span id="blockerSectionCount" class="badge danger-badge"></span>
       </div>
 
+      <div id="blockers"></div>
 
-      <!-- BLOCKERS -->
-      <div class="card">
+    </div>
 
-        <div class="card-head">
 
-          <div>
-            <h2>Blockers & Risks</h2>
+    <!-- DEPENDENCIES -->
 
-            <div class="small">
-              Issues detected by the agent
-            </div>
-          </div>
+    <div id="dependenciesSection" class="result-section hidden">
 
-        </div>
-
-        <div id="blockers">
-
-          <div class="empty">
-            No blocker information available.
-          </div>
-
-        </div>
-
+      <div class="section-title">
+        <h3>🔗 Dependencies</h3>
+        <span id="dependencySectionCount" class="badge"></span>
       </div>
 
+      <div id="dependencies"></div>
 
-      <!-- DAILY SUMMARY -->
-      <div class="card summary-card">
-
-        <div class="card-head">
-
-          <div>
-            <h2>Executive Daily Summary</h2>
-
-            <div class="small">
-              Project health and immediate priorities
-            </div>
-          </div>
-
-        </div>
-
-        <div id="dailySummary">
-
-          <div class="empty">
-            Run the agent to generate the executive summary.
-          </div>
-
-        </div>
-
-      </div>
+    </div>
 
 
-      <!-- RAW JSON -->
-      <details class="raw-json">
+    <!-- EMPTY STATE -->
 
-        <summary>
-          Advanced: View Raw JSON
-        </summary>
+    <div id="emptyState" class="empty-state">
 
-        <pre id="output">
-No result yet.
-        </pre>
+      <div class="empty-icon">🧠</div>
 
-      </details>
+      <h3>Ready to analyze</h3>
 
-    </section>
+      <p>
+        Enter a feature description and click
+        <strong>Analyze Feature</strong>.
+      </p>
 
-  </main>
+    </div>
 
+  </section>
 
-  <footer class="footer">
-
-    AI Project Manager Agent · VisionX · Track 4
-
-  </footer>
+</main>
 
 
-  <script src="app.js"></script>
+<footer class="footer">
+  AI Project Manager Agent · VisionX · Track 4
+</footer>
+
+
+<script src="app.js"></script>
 
 </body>
 </html>
